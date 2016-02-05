@@ -47,6 +47,11 @@ shutter3ClosePv=PV('ASTA:LSC03:OC:CLOSE')
 shutterClosePVList=[shutter1ClosePv,shutter2ClosePv,shutter3ClosePv]
 
 ##################################################################################################################            
+
+def shutterFunction(shutterPVList,pvVal=1,wait=True):
+    "Opens, Closes, or Enables/Disables TTL Input for shutters, depending on which PVs are passed in. Takes a list of PVs as an argument."
+    for shutterPV in shutterPVList:
+        shutterPV.put(pvVal,wait)
     
 def abortRoutine():
     "This is the abort routine"
@@ -54,10 +59,10 @@ def abortRoutine():
     # kill scan routine process
     os.kill(pid, signal.SIGKILL)
     # Disable shutters
-    pvScan.shutterFunction(shutterTTLDisablePVList,1)
+    shutterFunction(shutterTTLDisablePVList,1)
     sleep(0.5)
     # Close shutters
-    pvScan.shutterFunction(shutterClosePVList,1)
+    shutterFunction(shutterClosePVList,1)
     # Stop motors
     motor1Stop.put(1)
     motor2Stop.put(1)

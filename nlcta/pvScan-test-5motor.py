@@ -23,7 +23,7 @@ pvPrefix=sys.argv[1]
 os.environ['PVSCAN_PVPREFIX']=pvPrefix
 
 # Import pvScan module
-sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/R2.0/modules/')
+sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/prod/modules/')
 import pvScan
 
 # Motors
@@ -239,11 +239,8 @@ if __name__ == "__main__":
         datalogthread.start()
     try:
         scanRoutine()
-    except ValueError:
-        pass
-    finally:
-        #pvScan.dataFlag=0  # Stop logging data
         sleep(pause1) # Log data for a little longer
+    finally:
         pvScan.dataFlag=0  # Stop logging data
 
         

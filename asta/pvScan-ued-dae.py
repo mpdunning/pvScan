@@ -241,10 +241,8 @@ if __name__ == "__main__":
         datalogthread.start()
     try:
         scanRoutine()
-    except ValueError:
-        pass
-    finally:
         sleep(pause1) # Log data for a little longer
+    finally:
         pvScan.dataFlag=0  # Stop logging data
         
 ##################################################################################################################

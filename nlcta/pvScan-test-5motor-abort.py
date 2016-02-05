@@ -39,20 +39,33 @@ motor3Stop=PV(motor3 + ':MOTR.STOP')
 #laserShutter1Pv=PV('')
 #laserShutter2Pv=PV('')
 #laserShutter3Pv=PV('')
+shutter1TTLDisablePv=PV('ESB:GP01:VAL01')
+shutter2TTLDisablePv=PV('ESB:GP01:VAL02')
+shutter3TTLDisablePv=PV('ESB:GP01:VAL03')
+shutterTTLDisablePVList=[shutter1TTLDisablePv,shutter2TTLDisablePv,shutter3TTLDisablePv]
+shutter1ClosePv=PV('ESB:GP01:VAL01')
+shutter2ClosePv=PV('ESB:GP01:VAL02')
+shutter3ClosePv=PV('ESB:GP01:VAL03')
+shutterClosePVList=[shutter1ClosePv,shutter2ClosePv,shutter3ClosePv]
+
 
 
 ##################################################################################################################            
+
+def shutterFunction(shutterPVList,pvVal=1,wait=True):
+    "Opens, Closes, or Enables/Disables TTL Input for shutters, depending on which PVs are passed in. Takes a list of PVs as an argument."
+    for shutterPV in shutterPVList:
+        shutterPV.put(pvVal,wait)
     
 def abortRoutine():
     "This is the abort routine"
     msgpv.put('Aborting')
     # kill scan routine process
     os.kill(pid, signal.SIGKILL)
-    # block laser
-    #laserShutter1Pv.put(0)
-    #laserShutter2Pv.put(0)  
-    #laserShutter3Pv.put(0)  
-    # stop stages
+    # Disable and close shutters
+    shutterFunction(shutterTTLDisablePVList,0)
+    shutterFunction(shutterClosePVList,0)
+    # Stop motors
     motor1Stop.put(1)
     motor2Stop.put(1)
     motor3Stop.put(1)
