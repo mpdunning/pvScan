@@ -40,13 +40,13 @@ class Tee(object):
 
 def motorWait(motor,val,delta=0.005,timeOut=120.0):
     "Waits until motor has stopped to proceed."
-    if not isinstance(motor.get(), float):
+    try:
+        while motor.get() != val:
+            if math.fabs(motor.get() - val) < delta: break
+            continue
+    except TypeError:
         print "Motor %s RBV is invalid, pausing for %f seconds." %(motor.pvname,timeOut)
         sleep(timeOut)
-    else:
-        while motor.get() != val:
-            if math.fabs(motor.get() - val) < delta or motor.get()=='None': break
-            continue
 
 def grabImages(grabImagesN,cameraPvPrefix,grabImagesFilepath,grabImagesPlugin='TIFF1',grabImagesFilenameExtras='',pause=0.5):
     "Grabs n images from camera"
@@ -69,11 +69,16 @@ def grabImages(grabImagesN,cameraPvPrefix,grabImagesFilepath,grabImagesPlugin='T
     PV(imagePvPrefix+':FileWriteMode').put(1)
     PV(imagePvPrefix+':NumCapture').put(1)
     PV(imagePvPrefix+':AutoSave').put(1)
-    for i in range(grabImagesN):
-        imageFilenameTemplate='%s%s_' + timestamp(1) + '_%3.3d' + fileExt
-        PV(imagePvPrefix+':FileTemplate').put(imageFilenameTemplate)
-        PV(imagePvPrefix+':Capture').put(1,wait=True)
-    printSleep(pause)
+    if PV(cameraPvPrefix+':cam1:Acquire.RVAL').get():
+        for i in range(grabImagesN):
+            imageFilenameTemplate='%s%s_' + timestamp(1) + '_%3.3d' + fileExt
+            PV(imagePvPrefix+':FileTemplate').put(imageFilenameTemplate)
+            PV(imagePvPrefix+':Capture').put(1,wait=True)
+        printSleep(pause)
+    else:
+        print timestamp(1), 'Failed: Camera not acquiring'
+        msgPv.put('Failed: Camera not acquiring')
+        raise Exception('Camera not acquiring')
 
 def motor1DScan(motorPv,start,stop,motorRBVPv,nSteps,grabImagesFlag=0,grabImagesN=0,grabImagesSource='',grabImagesFilepath='~/pvScan/images/',grabImagesPlugin='TIFF1',grabImagesFilenameExtras='',settleTime=0.5):
     "Scans motor from start to stop in n steps, optionally grabbing images at each step."
@@ -106,6 +111,8 @@ def shutterCheck(shutterPVList,val=1.0):
     for shutter in shutterPVList:
         if shutter.get() > val:
             print 'Shutter: %s Value: %f' % (shutter.pvname,shutter.get())
+            print timestamp(1), 'Failed: Shutter not closed'
+            msgPv.put('Failed: Shutter not closed')
             raise Exception('Shutter not closed')
 
 def printSleep(sleepTime,printString='Pausing'):

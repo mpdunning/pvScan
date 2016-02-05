@@ -4,7 +4,7 @@
 
 from epics import caget,caput,PV
 from time import sleep
-import datetime,os,sys
+import datetime,os,sys,math
 from threading import Thread
 
 args='PV_PREFIX'
@@ -30,6 +30,7 @@ import pvScan
 motor1='ASTA:POLX01:AO:ABSMOV'  # Motor 1 actual PV (UED pitch motor)
 motor1Pv=PV(motor1) # Motor position PV object
 motor1RBVPv=PV('ASTA:POLX01:AI:ACTPOS') # Motor position RBV PV object
+motor1GoPv=PV('ASTA:POLX01:BO:GOABS') # Motor 'Go' PV object
 motor1Start=PV(pvPrefix + ':MOTOR1:START').get()  # for scanning
 motor1Stop=PV(pvPrefix + ':MOTOR1:STOP').get()  # for scanning
 motor1NSteps=PV(pvPrefix + ':MOTOR1:NSTEPS').get()  # for scanning
@@ -55,10 +56,11 @@ motor4='MOTR:AS01:MC02:CH7:MOTOR'  # Motor 4 actual PV (UED X motor)
 motor4Pv=PV(motor4) # Motor position PV object
 motor4RBVPv=PV(motor4 + '.RBV') # Motor position RBV PV object
 #
-motor5='MOTR:AS01:MC01:CH8:MOTR'  # Motor 5 actual PV (UED Delay motor)
+motor5='MOTR:AS01:MC01:CH8:MOTOR'  # Motor 5 actual PV (UED Delay motor)
 motor5Pv=PV(motor5) # Motor position PV object
 motor5RBVPv=PV(motor5 + '.RBV') # Motor position RBV PV object
-# Shutters/stoppers/screens
+#
+# Shutters.  Make a list for each group, to use shutterFunction()
 shutter1TTLEnablePv=PV('ASTA:LSC01:TTL:IN:HIGH')
 shutter2TTLEnablePv=PV('ASTA:LSC02:TTL:IN:HIGH')
 shutter3TTLEnablePv=PV('ASTA:LSC03:TTL:IN:HIGH')
@@ -79,6 +81,15 @@ shutter1RBVPv=PV('ADC:AS01:12:V')
 shutter2RBVPv=PV('ADC:AS01:13:V')
 shutter3RBVPv=PV('ADC:AS01:14:V')
 shutterRBVPVList=[shutter1RBVPv,shutter2RBVPv,shutter3RBVPv]
+shutter1FastPv=PV('ASTA:LSC01:MODE:FAST')
+shutter2FastPv=PV('ASTA:LSC02:MODE:FAST')
+shutter3FastPv=PV('ASTA:LSC03:MODE:FAST')
+shutterFastPVList=[shutter1FastPv,shutter2FastPv,shutter3FastPv]
+shutter1SoftPv=PV('ASTA:LSC01:MODE:SOFT')
+shutter2SoftPv=PV('ASTA:LSC02:MODE:SOFT')
+shutter3SoftPv=PV('ASTA:LSC03:MODE:SOFT')
+shutterSoftPVList=[shutter1SoftPv,shutter2SoftPv,shutter3SoftPv]
+#
 # ADC values
 #lsrpwrPv=PV('ESB:A01:ADC1:AI:CH3')
 #toroid0355Pv=PV('ESB:A01:ADC1:AI:CH4')
@@ -141,7 +152,7 @@ def uedDAEReset(resetMotorPv='',grabImagesFlag=0,grabImagesN=0,grabImagesSource=
     # Disable shutters 
     print pvScan.timestamp(1), 'Disabling shutters'
     pvScan.msgPv.put('Disabling shutters')
-    pvScan.shutterFunction(shutterTTLDisablePVList,0)
+    pvScan.shutterFunction(shutterTTLDisablePVList,1)
     # Close shutters
     print pvScan.timestamp(1), 'Closing shutters'
     pvScan.msgPv.put('Closing shutters')
@@ -164,6 +175,7 @@ def uedDAEMotorScan(motor1Pv,motor1RBVPv,motor1Start,motor1Stop,motor1NSteps,mot
         print pvScan.timestamp(1), 'Moving %s to %f' % (motor1Pv.pvname,newPos1)
         pvScan.msgPv.put('Moving motor 1')
         motor1Pv.put(newPos1)
+        motor1GoPv.put(1)
         pvScan.motorWait(motor1RBVPv,newPos1,timeOut=5.0)
         # Move motor 2
         newPos2=motor2Offset + radius*math.cos(newPos0*math.pi/180)
@@ -185,6 +197,7 @@ def uedDAEMotorScan(motor1Pv,motor1RBVPv,motor1Start,motor1Stop,motor1NSteps,mot
     print pvScan.timestamp(1), 'Moving %s back to initial position: %f' %(motor1Pv.pvname,initialPos1)
     pvScan.msgPv.put('Moving motor 1 back to initial position')
     motor1Pv.put(initialPos1)
+    motor1GoPv.put(1)
     pvScan.motorWait(motor1RBVPv,initialPos1)
     print pvScan.timestamp(1), 'Moving %s back to initial position: %f' %(motor2Pv.pvname,initialPos2)
     pvScan.msgPv.put('Moving motor 2 back to initial position')
@@ -199,19 +212,21 @@ def scanRoutine():
     "This is the scan routine"
     print pvScan.timestamp(1), 'Starting'
     pvScan.msgPv.put('Starting')
-    # Close shutters
+    # Close shutters and set to Fast Mode
     print pvScan.timestamp(1), 'Closing shutters'
     pvScan.msgPv.put('Closing shutters')
-    pvScan.shutterFunction(shutterClosePVList,0)
+    pvScan.shutterFunction(shutterClosePVList,1)
+    pvScan.shutterFunction(shutterFastPVList,1)
     sleep(0.5)
     # Make sure shutters are closed
-    pvScan.shutterCheck(shutterRBVPVList)
+    #pvScan.shutterCheck(shutterRBVPVList)
     # Do motor scan 
     uedDAEMotorScan(motor1Pv,motor1RBVPv,motor1Start,motor1Stop,motor1NSteps,motor1Offset,motor2Pv,motor2RBVPv,motor2Offset,motor3Pv,motor3RBVPv,motor3Offset,radius,resetFlag,resetMotorPv,grabImagesFlag,nResets,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras='',settleTime=0.5)
     print pvScan.timestamp(1), 'Closing shutters'
     pvScan.msgPv.put('Closing shutters')
-    # Close shutters
-    pvScan.shutterFunction(shutterClosePVList,0)
+    # Close shutters and set back to Soft Mode
+    pvScan.shutterFunction(shutterClosePVList,1)
+    pvScan.shutterFunction(shutterSoftPVList,1)
     print pvScan.timestamp(1), 'Done'
     pvScan.msgPv.put('Done')
     
@@ -224,10 +239,13 @@ if __name__ == "__main__":
     if dataEnable==1:
         datalogthread=Thread(target=pvScan.datalog,args=(dataInt,dataFilename,pvList,nPtsMax))
         datalogthread.start()
-    scanRoutine()
-    sleep(pause1) # Log data for a little longer
-    pvScan.dataFlag=0  # Stop logging data
-
+    try:
+        scanRoutine()
+    except ValueError:
+        pass
+    finally:
+        sleep(pause1) # Log data for a little longer
+        pvScan.dataFlag=0  # Stop logging data
         
 ##################################################################################################################
         

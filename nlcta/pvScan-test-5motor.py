@@ -59,7 +59,8 @@ motor4RBVPv=PV(motor4 + '.RBV') # Motor position RBV PV object
 motor5='ESB:XPS2:m1:MOTR'  # Motor 5 actual PV (UED Delay motor)
 motor5Pv=PV(motor5) # Motor position PV object
 motor5RBVPv=PV(motor5 + '.RBV') # Motor position RBV PV object
-# Shutters/stoppers/screens
+#
+# Shutters.  Make a list for each group, to use shutterFunction()
 shutter1TTLEnablePv=PV('ESB:GP01:VAL01')
 shutter2TTLEnablePv=PV('ESB:GP01:VAL02')
 shutter3TTLEnablePv=PV('ESB:GP01:VAL03')
@@ -80,6 +81,15 @@ shutter1RBVPv=PV('ESB:GP01:VAL01')
 shutter2RBVPv=PV('ESB:GP01:VAL02')
 shutter3RBVPv=PV('ESB:GP01:VAL03')
 shutterRBVPVList=[shutter1RBVPv,shutter2RBVPv,shutter3RBVPv]
+shutter1FastPv=PV('ESB:GP01:VAL01')
+shutter2FastPv=PV('ESB:GP01:VAL02')
+shutter3FastPv=PV('ESB:GP01:VAL03')
+shutterFastPVList=[shutter1FastPv,shutter2FastPv,shutter3FastPv]
+shutter1SoftPv=PV('ESB:GP01:VAL01')
+shutter2SoftPv=PV('ESB:GP01:VAL02')
+shutter3SoftPv=PV('ESB:GP01:VAL03')
+shutterSoftPVList=[shutter1SoftPv,shutter2SoftPv,shutter3SoftPv]
+#
 # ADC values
 #lsrpwrPv=PV('ESB:A01:ADC1:AI:CH3')
 #toroid0355Pv=PV('ESB:A01:ADC1:AI:CH4')
@@ -200,18 +210,20 @@ def scanRoutine():
     "This is the scan routine"
     print pvScan.timestamp(1), 'Starting'
     pvScan.msgPv.put('Starting')
-    # Close shutters
+    # Close shutters and set to Fast Mode
     print pvScan.timestamp(1), 'Closing shutters'
     pvScan.msgPv.put('Closing shutters')
     pvScan.shutterFunction(shutterClosePVList,0)
+    pvScan.shutterFunction(shutterFastPVList,0)
     sleep(0.5)
     pvScan.shutterCheck(shutterRBVPVList)
     # Do motor scan 
     uedDAEMotorScan(motor1Pv,motor1RBVPv,motor1Start,motor1Stop,motor1NSteps,motor1Offset,motor2Pv,motor2RBVPv,motor2Offset,motor3Pv,motor3RBVPv,motor3Offset,radius,resetFlag,resetMotorPv,grabImagesFlag,nResets,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras='',settleTime=0.5)
     print pvScan.timestamp(1), 'Closing shutters'
     pvScan.msgPv.put('Closing shutters')
-    # Close shutters
+    # Close shutters and set back to Soft Mode
     pvScan.shutterFunction(shutterClosePVList,0)
+    pvScan.shutterFunction(shutterSoftPVList,0)
     print pvScan.timestamp(1), 'Done'
     pvScan.msgPv.put('Done')
 
@@ -225,9 +237,14 @@ if __name__ == "__main__":
     if dataEnable==1:
         datalogthread=Thread(target=pvScan.datalog,args=(dataInt,dataFilename,pvList,nPtsMax))
         datalogthread.start()
-    scanRoutine()
-    sleep(pause1) # Log data for a little longer
-    pvScan.dataFlag=0  # Stop logging data
+    try:
+        scanRoutine()
+    except ValueError:
+        pass
+    finally:
+        #pvScan.dataFlag=0  # Stop logging data
+        sleep(pause1) # Log data for a little longer
+        pvScan.dataFlag=0  # Stop logging data
 
         
 ##################################################################################################################

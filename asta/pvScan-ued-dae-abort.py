@@ -35,15 +35,16 @@ motor2Stop=PV(motor2 + '.STOP')
 motor3='MOTR:AS01:MC02:CH2:MOTOR'
 motor3Stop=PV(motor3 + '.STOP')
 
-# Shutters to be disabled (does not necessarily close them)
+# Shutter disable PVs
 shutter1TTLDisablePv=PV('ASTA:LSC01:TTL:IN:DISABLE')
 shutter2TTLDisablePv=PV('ASTA:LSC02:TTL:IN:DISABLE')
 shutter3TTLDisablePv=PV('ASTA:LSC03:TTL:IN:DISABLE')
-
-# Shutters to be inserted
-laserShutter1Pv=PV('ASTA:LSC01:OC:CLOSE')
-laserShutter2Pv=PV('ASTA:LSC02:OC:CLOSE')
-laserShutter3Pv=PV('ASTA:LSC03:OC:CLOSE')
+shutterTTLDisablePVList=[shutter1TTLDisablePv,shutter2TTLDisablePv,shutter3TTLDisablePv]
+# Shutter close PVs
+shutter1ClosePv=PV('ASTA:LSC01:OC:CLOSE')
+shutter2ClosePv=PV('ASTA:LSC02:OC:CLOSE')
+shutter3ClosePv=PV('ASTA:LSC03:OC:CLOSE')
+shutterClosePVList=[shutter1ClosePv,shutter2ClosePv,shutter3ClosePv]
 
 ##################################################################################################################            
     
@@ -53,13 +54,11 @@ def abortRoutine():
     # kill scan routine process
     os.kill(pid, signal.SIGKILL)
     # Disable shutters
-    pvScan.uedShutterDisable(shutter1TTLDisablePv,shutter2TTLDisablePv,shutter3TTLDisablePv)
+    pvScan.shutterFunction(shutterTTLDisablePVList,1)
     sleep(0.5)
     # Close shutters
-    laserShutter1Pv.put(0)
-    laserShutter2Pv.put(0)  
-    laserShutter3Pv.put(0)  
-    # stop stages
+    pvScan.shutterFunction(shutterClosePVList,1)
+    # Stop motors
     motor1Stop.put(1)
     motor2Stop.put(1)
     motor3Stop.put(1)
