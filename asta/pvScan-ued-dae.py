@@ -139,10 +139,12 @@ def uedDAEReset(resetMotorPv='',grabImagesFlag=0,grabImagesN=0,grabImagesSource=
     "Does UED DAE reset routine."
     print pvScan.timestamp(1), 'Starting reset loop'
     pvScan.msgPv.put('Starting reset loop')
-    # Enable shutters 
+    # Enable shutters: open shutters 1 and 2, enable TTL In for shutter 3 
     print pvScan.timestamp(1), 'Enabling shutters'
     pvScan.msgPv.put('Enabling shutters')
-    pvScan.shutterFunction(shutterTTLEnablePVList,1)
+    shutter1OpenPv.put(1)
+    shutter2OpenPv.put(1)
+    shutter3TTLEnablePv.put(1)
     pvScan.printSleep(pause)
     if grabImagesFlag:
         if resetMotorPv:
@@ -156,7 +158,7 @@ def uedDAEReset(resetMotorPv='',grabImagesFlag=0,grabImagesN=0,grabImagesSource=
     # Close shutters
     print pvScan.timestamp(1), 'Closing shutters'
     pvScan.msgPv.put('Closing shutters')
-    pvScan.shutterFunction(shutterClosePVList,0)
+    pvScan.shutterFunction(shutterClosePVList,1)
     print pvScan.timestamp(1), 'Reset loop done'
     pvScan.msgPv.put('Reset loop done')
 
@@ -192,7 +194,7 @@ def uedDAEMotorScan(motor1Pv,motor1RBVPv,motor1Start,motor1Stop,motor1NSteps,mot
         pvScan.printSleep(settleTime,'Settling')
         # Do reset loop if resetFlag==1
         if resetFlag:
-            uedDAEReset(resetMotorPv,grabImagesFlag,grabImagesN,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras,pause=1.0)
+            uedDAEReset(resetMotorPv,grabImagesFlag,grabImagesN,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras,pause=0.5)
     # Move motors back to initial positions
     print pvScan.timestamp(1), 'Moving %s back to initial position: %f' %(motor1Pv.pvname,initialPos1)
     pvScan.msgPv.put('Moving motor 1 back to initial position')
