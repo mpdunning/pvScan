@@ -178,7 +178,7 @@ def uedDAEMotorScan(motor1Pv,motor1RBVPv,motor1Start,motor1Stop,motor1NSteps,mot
         pvScan.msgPv.put('Moving motor 1')
         motor1Pv.put(newPos1)
         motor1GoPv.put(1)
-        pvScan.motorWait(motor1RBVPv,newPos1,timeOut=5.0)
+        pvScan.motorWait(motor1RBVPv,newPos1)
         # Move motor 2
         newPos2=motor2Offset + radius*math.cos(newPos0*math.pi/180)
         print pvScan.timestamp(1), 'Moving %s to %f' % (motor2Pv.pvname,newPos2)

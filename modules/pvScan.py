@@ -41,9 +41,12 @@ class Tee(object):
 def motorWait(motor,val,delta=0.005,timeOut=120.0):
     "Waits until motor has stopped to proceed."
     try:
-        while motor.get() != val:
-            if math.fabs(motor.get() - val) < delta: break
-            continue
+        count=0
+        pause=0.2
+        while motor.get() != val and count < timeOut/pause:
+            if math.fabs(motor.get() - val) <= delta: break
+            sleep(pause)
+            count+=1
     except TypeError:
         print "Motor %s RBV is invalid, pausing for %f seconds." %(motor.pvname,timeOut)
         sleep(timeOut)
