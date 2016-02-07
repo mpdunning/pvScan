@@ -37,19 +37,48 @@ class Tee(object):
     def write(self, data):
         self.file.write(data)
         self.stdout.write(data)
+        
+class Motor(PV):
+    "Motor class which inherits from pyEpics PV class."
+    def __init__(self,motorNumber,pvname):
+        PV.__init__(self,pvname)
+        self.motorNumber=motorNumber
+        self.rbv=PV(pvname + '.RBV')
+        self.velo=PV(pvname + '.VELO')
+        self.start= PV(pvPrefix + ':MOTOR' + str(self.motorNumber) + ':START').get()
+        self.stop= PV(pvPrefix + ':MOTOR' + str(self.motorNumber) + ':STOP').get()
+        self.nsteps= PV(pvPrefix + ':MOTOR' + str(self.motorNumber) + ':NSTEPS').get()
+        self.offset= PV(pvPrefix + ':MOTOR' + str(self.motorNumber) + ':OFFSET').get()
 
-def motorWait(motor,val,delta=0.005,timeOut=120.0):
-    "Waits until motor has stopped to proceed."
-    try:
-        count=0
-        pause=0.2
-        while motor.get() != val and count < timeOut/pause:
-            if math.fabs(motor.get() - val) <= delta: break
-            sleep(pause)
-            count+=1
-    except TypeError:
-        print "Motor %s RBV is invalid, pausing for %f seconds." %(motor.pvname,timeOut)
-        sleep(timeOut)
+    def motorWait(self,val,delta=0.005,timeout=180.0):
+        "Waits until motor has stopped to proceed."
+        try:
+            count=0
+            pause=0.2
+            while self.rbv.get() != val and count < timeout/pause:
+                if math.fabs(self.rbv.get() - val) <= delta: break
+                sleep(pause)
+                count+=1
+        except TypeError:
+            print "Motor %s RBV is invalid, pausing for %f seconds." %(self.pvname,timeout)
+            sleep(timeout)
+
+    def put(self,value,wait=True,timeout=180.0):
+        PV.put(self,value)
+        if wait:
+            Motor.motorWait(self,value,timeout=timeout)
+
+class PolluxMotor(Motor):
+    "Motor class which inherits from pvScan Motor class."
+    def __init__(self,motorNumber,pvname):
+        Motor.__init__(self,motorNumber,pvname)
+        self.rbv=PV(':'.join(pvname.split(':')[0:2]) + ':AI:ACTPOS')
+        self.velo=PV(':'.join(pvname.split(':')[0:2]) + ':AO:VELO')
+        self.go=PV(':'.join(pvname.split(':')[0:2]) + ':BO:GOABS')
+    
+    def put(self,value,wait=True,timeout=180.0):
+        Motor.put(self,value)
+        self.go.put(1)
 
 def grabImages(grabImagesN,cameraPvPrefix,grabImagesFilepath,grabImagesPlugin='TIFF1',grabImagesFilenameExtras='',pause=0.5):
     "Grabs n images from camera"

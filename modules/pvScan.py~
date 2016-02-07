@@ -1,6 +1,6 @@
 # pvScan module
 
-from epics import caget,caput,PV
+from epics import caget,caput,PV,Motor
 from time import sleep
 import datetime,math,os,sys
 import subprocess
@@ -37,12 +37,37 @@ class Tee(object):
     def write(self, data):
         self.file.write(data)
         self.stdout.write(data)
+        
+class MyMotor(PV):
+    "Motor class which inherits from pyEpics PV class."
+    def __init__(self,motorNumber,pvname):
+        PV.__init__(self,pvname)
+        self.motorNumber=motorNumber
+        self.rbv=PV(pvname + '.RBV')
+        self.start= PV(pvPrefix + ':MOTOR' + str(self.motorNumber) + ':START')
+        
+        
 
-def motorWait(motor,val,delta=0.005):
-    "Waits until motor has stopped to proceed"
-    while motor.get() != val:
-        if math.fabs(motor.get() - val) < delta: break
-        continue
+class PolluxMotor(Motor):
+    "Pollux motor class which inherits from pyEpics Motor class."
+    def __init__(self,pvname):
+        Motor.__init__(self,pvname)
+        
+
+        
+
+def motorWait(motor,val,delta=0.005,timeOut=120.0):
+    "Waits until motor has stopped to proceed."
+    try:
+        count=0
+        pause=0.2
+        while motor.get() != val and count < timeOut/pause:
+            if math.fabs(motor.get() - val) <= delta: break
+            sleep(pause)
+            count+=1
+    except TypeError:
+        print "Motor %s RBV is invalid, pausing for %f seconds." %(motor.pvname,timeOut)
+        sleep(timeOut)
 
 def grabImages(grabImagesN,cameraPvPrefix,grabImagesFilepath,grabImagesPlugin='TIFF1',grabImagesFilenameExtras='',pause=0.5):
     "Grabs n images from camera"
@@ -56,45 +81,67 @@ def grabImages(grabImagesN,cameraPvPrefix,grabImagesFilepath,grabImagesPlugin='T
         fileExt='.jpg'
     else:
         fileExt='.img'
-    imageFilenameTemplate='%s%s_' + timestamp() + '_%3.3d' + fileExt
     PV(imagePvPrefix+':EnableCallbacks').put(1)
-    # PV().put() doesn't seem to work for putting strings to waveforms
-    #PV(imagePvPrefix+':FilePath').put(grabImagesFilepath)  
-    #PV(imagePvPrefix+':FileName').put(cameraPvPrefix + '_' + grabImagesFilenameExtras)
-    # os.system is deprecated, use subprocess.call instead
-    #os.system('caput -t -S ' + cameraPvPrefix + ':' + grabImagesPlugin + ':FilePath ' + grabImagesFilepath + ' > /dev/null')  
-    #os.system('caput -t -S ' + cameraPvPrefix + ':' + grabImagesPlugin + ':FileName ' + cameraPvPrefix + grabImagesFilenameExtras + ' > /dev/null')
+    # PV().put() doesn't seem to work for putting strings to waveforms. Use subprocess.check_call('caput') instead.
     with open(os.devnull, 'wb') as devnull:
         subprocess.check_call('caput -t -S ' + cameraPvPrefix + ':' + grabImagesPlugin + ':FilePath ' + grabImagesFilepath, shell=True, stdout=devnull)
         subprocess.check_call('caput -t -S ' + cameraPvPrefix + ':' + grabImagesPlugin + ':FileName ' + cameraPvPrefix + grabImagesFilenameExtras, shell=True, stdout=devnull)
     PV(imagePvPrefix+':AutoIncrement').put(1)
-    PV(imagePvPrefix+':FileTemplate').put(imageFilenameTemplate)
     PV(imagePvPrefix+':FileWriteMode').put(1)
-    PV(imagePvPrefix+':NumCapture').put(grabImagesN)
+    PV(imagePvPrefix+':NumCapture').put(1)
     PV(imagePvPrefix+':AutoSave').put(1)
-    PV(imagePvPrefix+':Capture').put(1)
-    print timestamp(1), 'Pausing...'; msgPv.put('Pausing...'); sleep(pause)
+    if PV(cameraPvPrefix+':cam1:Acquire.RVAL').get():
+        for i in range(grabImagesN):
+            imageFilenameTemplate='%s%s_' + timestamp(1) + '_%3.3d' + fileExt
+            PV(imagePvPrefix+':FileTemplate').put(imageFilenameTemplate)
+            PV(imagePvPrefix+':Capture').put(1,wait=True)
+        printSleep(pause)
+    else:
+        print timestamp(1), 'Failed: Camera not acquiring'
+        msgPv.put('Failed: Camera not acquiring')
+        raise Exception('Camera not acquiring')
 
 def motor1DScan(motorPv,start,stop,motorRBVPv,nSteps,grabImagesFlag=0,grabImagesN=0,grabImagesSource='',grabImagesFilepath='~/pvScan/images/',grabImagesPlugin='TIFF1',grabImagesFilenameExtras='',settleTime=0.5):
-    "Scans motor from start to stop in n steps"
+    "Scans motor from start to stop in n steps, optionally grabbing images at each step."
     initialPos=motorPv.get()
     print timestamp(1), 'Starting motor scan'
     msgPv.put('Starting motor scan')
-    inc=abs((stop-start)/nSteps)
-    for i in range(nSteps+1):
+    inc=(stop-start)/(nSteps-1)
+    for i in range(nSteps):
         newPos=start + i*inc
         print timestamp(1), 'Moving %s to %f' % (motorPv.pvname,newPos)
         msgPv.put('Moving motor')
         motorPv.put(newPos)
         motorWait(motorRBVPv,newPos)
-        print timestamp(1), 'Settle...'; msgPv.put('Settle...'); sleep(settleTime)
+        printSleep(settleTime,'Settling')
         if grabImagesFlag:
             grabImagesFilenameExtras='_MotorPos-' + str(motorPv.get())
             grabImages(grabImagesN,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras)
-    motorPv.put(initialPos)
-    print timestamp(1), 'Moving %s back to initial position: %f' %(motorPv.pvname,start)
+    # Move motor back to initial positions
+    print timestamp(1), 'Moving %s back to initial position: %f' %(motorPv.pvname,initialPos)
     msgPv.put('Moving motor back to initial position')
+    motorPv.put(initialPos)
     motorWait(motorRBVPv,initialPos)
+
+def shutterFunction(shutterPVList,pvVal=1,wait=True):
+    "Opens, Closes, or Enables/Disables TTL Input for shutters, depending on which PVs are passed in. Takes a list of PVs as an argument."
+    for shutterPV in shutterPVList:
+        shutterPV.put(pvVal,wait)
+
+def shutterCheck(shutterPVList,val=1.0):
+    for shutter in shutterPVList:
+        if shutter.get() > val:
+            print 'Shutter: %s Value: %f' % (shutter.pvname,shutter.get())
+            print timestamp(1), 'Failed: Shutter not closed'
+            msgPv.put('Failed: Shutter not closed')
+            raise Exception('Shutter not closed')
+
+def printSleep(sleepTime,printString='Pausing'):
+    "Prints message and pauses for sleepTime seconds."
+    if sleepTime:
+        print timestamp(1), '%s for %f seconds...' % (printString,sleepTime)
+        msgPv.put(printString + ' for ' + str(sleepTime) + ' seconds...')
+        sleep(sleepTime)
 
 def datalog(interval,filename,pvlist,nptsmax):
     "Logs PV data to a file; designed to be run in a separate thread. Uses dataFlag global variable which is shared between threads. PVs must be in pvlist."

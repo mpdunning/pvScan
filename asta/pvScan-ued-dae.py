@@ -27,38 +27,11 @@ sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/R2.0/modules/')
 import pvScan
 
 # Motors
-motor1='ASTA:POLX01:AO:ABSMOV'  # Motor 1 actual PV (UED pitch motor)
-motor1Pv=PV(motor1) # Motor position PV object
-motor1RBVPv=PV('ASTA:POLX01:AI:ACTPOS') # Motor position RBV PV object
-motor1GoPv=PV('ASTA:POLX01:BO:GOABS') # Motor 'Go' PV object
-motor1Start=PV(pvPrefix + ':MOTOR1:START').get()  # for scanning
-motor1Stop=PV(pvPrefix + ':MOTOR1:STOP').get()  # for scanning
-motor1NSteps=PV(pvPrefix + ':MOTOR1:NSTEPS').get()  # for scanning
-motor1Offset=PV(pvPrefix + ':MOTOR1:OFFSET').get()  # for scanning
-#
-motor2='MOTR:AS01:MC02:CH8:MOTOR'  # Motor 2 actual PV (UED Y motor)
-motor2Pv=PV(motor2) # Motor position PV object
-motor2RBVPv=PV(motor2 + '.RBV') # Motor position RBV PV object
-motor2Start=PV(pvPrefix + ':MOTOR2:START').get()  # for scanning
-motor2Stop=PV(pvPrefix + ':MOTOR2:STOP').get()  # for scanning
-motor2NSteps=PV(pvPrefix + ':MOTOR2:NSTEPS').get()  # for scanning
-motor2Offset=PV(pvPrefix + ':MOTOR2:OFFSET').get()  # for scanning
-#
-motor3='MOTR:AS01:MC02:CH2:MOTOR'  # Motor 3 actual PV (UED Z motor)
-motor3Pv=PV(motor3) # Motor position PV object
-motor3RBVPv=PV(motor3 + '.RBV') # Motor position RBV PV object
-motor3Start=PV(pvPrefix + ':MOTOR3:START').get()  # for scanning
-motor3Stop=PV(pvPrefix + ':MOTOR3:STOP').get()  # for scanning
-motor3NSteps=PV(pvPrefix + ':MOTOR3:NSTEPS').get()  # for scanning
-motor3Offset=PV(pvPrefix + ':MOTOR3:OFFSET').get()  # for scanning
-#
-motor4='MOTR:AS01:MC02:CH7:MOTOR'  # Motor 4 actual PV (UED X motor)
-motor4Pv=PV(motor4) # Motor position PV object
-motor4RBVPv=PV(motor4 + '.RBV') # Motor position RBV PV object
-#
-motor5='MOTR:AS01:MC01:CH8:MOTOR'  # Motor 5 actual PV (UED Delay motor)
-motor5Pv=PV(motor5) # Motor position PV object
-motor5RBVPv=PV(motor5 + '.RBV') # Motor position RBV PV object
+motor1=pvScan.PolluxMotor(1,'ASTA:POLX01:AO:ABSMOV')  # Motor 1 class instance (UED pitch motor)
+motor2=pvScan.Motor(2,'MOTR:AS01:MC02:CH8:MOTOR')  # Motor 2 class instance (UED Y motor)
+motor3=pvScan.Motor(3,'MOTR:AS01:MC02:CH2:MOTOR')  # Motor 3 class instance (UED Z motor)
+motor4=pvScan.Motor(4,'MOTR:AS01:MC02:CH7:MOTOR')  # Motor 4 class instance (UED X motor)
+motor5=pvScan.Motor(5,'MOTR:AS01:MC01:CH8:MOTOR')  # Motor 5 class instance (UED Delay motor)
 #
 # Shutters.  Make a list for each group, to use shutterFunction()
 shutter1TTLEnablePv=PV('ASTA:LSC01:TTL:IN:HIGH')
@@ -99,7 +72,7 @@ shutterSoftPVList=[shutter1SoftPv,shutter2SoftPv,shutter3SoftPv]
 pause1=1.0  # sec
 
 #---- For data logging --------------------------
-pvList=[shutter1RBVPv,shutter2RBVPv,shutter3RBVPv,motor1RBVPv,motor2RBVPv,motor3RBVPv,motor4RBVPv,motor5RBVPv] # list of PVs to be monitored during scan
+pvList=[shutter1RBVPv,shutter2RBVPv,shutter3RBVPv,motor1.rbv,motor2.rbv,motor3.rbv,motor4.rbv,motor5.rbv] # list of PVs to be monitored during scan
 expName=PV(pvPrefix + ':IOC.DESC').get()
 if ' ' in expName: expName=expName.replace(' ','_')
 now=datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -129,7 +102,7 @@ grabImagesSource='ANDOR1'
 # --- For UED  --------------------------
 resetFlag=PV(pvPrefix + ':RESET:ENABLE').get()
 radius=PV(pvPrefix + ':RADIUS').get()
-resetMotorPv=motor1Pv
+resetMotorPv=motor1
 nResets=PV(pvPrefix + ':NRESETS').get()
 #-------------------------------------------------------------
 
@@ -162,53 +135,45 @@ def uedDAEReset(resetMotorPv='',grabImagesFlag=0,grabImagesN=0,grabImagesSource=
     print pvScan.timestamp(1), 'Reset loop done'
     pvScan.msgPv.put('Reset loop done')
 
-def uedDAEMotorScan(motor1Pv,motor1RBVPv,motor1Start,motor1Stop,motor1NSteps,motor1Offset,motor2Pv,motor2RBVPv,motor2Offset,motor3Pv,motor3RBVPv,motor3Offset,radius=0,resetFlag=0,resetMotorPv='',grabImagesFlag=0,grabImagesN=0,grabImagesSource='',grabImagesFilepath='~/pvScan/images/',grabImagesPlugin='TIFF1',grabImagesFilenameExtras='',settleTime=0.5):
+def uedDAEMotorScan(motor1,motor2,motor3,radius=0,resetFlag=0,resetMotorPv='',grabImagesFlag=0,grabImagesN=0,grabImagesSource='',grabImagesFilepath='~/pvScan/images/',grabImagesPlugin='TIFF1',grabImagesFilenameExtras='',settleTime=0.5):
     "Scans motor1 from start to stop in n steps, moving motors 2 and 3 and doing a reset loop at each step."
-    initialPos1=motor1Pv.get()
-    initialPos2=motor2Pv.get()
-    initialPos3=motor3Pv.get()
+    initialPos1=motor1.get()
+    initialPos2=motor2.get()
+    initialPos3=motor3.get()
     print pvScan.timestamp(1), 'Starting motor scan'
     pvScan.msgPv.put('Starting motor scan')
-    inc=(motor1Stop-motor1Start)/(motor1NSteps-1)
-    for i in range(motor1NSteps):
+    inc=(motor1.stop-motor1.start)/(motor1.nsteps-1)
+    for i in range(motor1.nsteps):
         # Move motor 1
-        newPos0=motor1Start + i*inc
-        newPos1=newPos0 + motor1Offset
-        print pvScan.timestamp(1), 'Moving %s to %f' % (motor1Pv.pvname,newPos1)
+        newPos0=motor1.start + i*inc
+        newPos1=newPos0 + motor1.offset
+        print pvScan.timestamp(1), 'Moving %s to %f' % (motor1.pvname,newPos1)
         pvScan.msgPv.put('Moving motor 1')
-        motor1Pv.put(newPos1)
-        motor1GoPv.put(1)
-        pvScan.motorWait(motor1RBVPv,newPos1)
+        motor1.put(newPos1,timeout=30)
         # Move motor 2
-        newPos2=motor2Offset + radius*math.cos(newPos0*math.pi/180)
-        print pvScan.timestamp(1), 'Moving %s to %f' % (motor2Pv.pvname,newPos2)
+        newPos2=motor2.offset + radius*math.cos(newPos0*math.pi/180)
+        print pvScan.timestamp(1), 'Moving %s to %f' % (motor2.pvname,newPos2)
         pvScan.msgPv.put('Moving motor 2')
-        motor2Pv.put(newPos2)
-        pvScan.motorWait(motor2RBVPv,newPos2)
+        motor2.put(newPos2)
         # Move motor 3
-        newPos3=motor3Offset + radius*math.sin(newPos0*math.pi/180)
-        print pvScan.timestamp(1), 'Moving %s to %f' % (motor3Pv.pvname,newPos3)
+        newPos3=motor3.offset + radius*math.sin(newPos0*math.pi/180)
+        print pvScan.timestamp(1), 'Moving %s to %f' % (motor3.pvname,newPos3)
         pvScan.msgPv.put('Moving motor 3')
-        motor3Pv.put(newPos3)
-        pvScan.motorWait(motor3RBVPv,newPos3)
+        motor3.put(newPos3)
         pvScan.printSleep(settleTime,'Settling')
         # Do reset loop if resetFlag==1
         if resetFlag:
-            uedDAEReset(resetMotorPv,grabImagesFlag,grabImagesN,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras,pause=0.5)
+            uedDAEReset(motorPv,grabImagesFlag,grabImagesN,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras,pause=0.5)
     # Move motors back to initial positions
-    print pvScan.timestamp(1), 'Moving %s back to initial position: %f' %(motor1Pv.pvname,initialPos1)
+    print pvScan.timestamp(1), 'Moving %s back to initial position: %f' %(motor1.pvname,initialPos1)
     pvScan.msgPv.put('Moving motor 1 back to initial position')
-    motor1Pv.put(initialPos1)
-    motor1GoPv.put(1)
-    pvScan.motorWait(motor1RBVPv,initialPos1)
-    print pvScan.timestamp(1), 'Moving %s back to initial position: %f' %(motor2Pv.pvname,initialPos2)
+    motor1.put(initialPos1)
+    print pvScan.timestamp(1), 'Moving %s back to initial position: %f' %(motor2.pvname,initialPos2)
     pvScan.msgPv.put('Moving motor 2 back to initial position')
-    motor2Pv.put(initialPos2)
-    pvScan.motorWait(motor2RBVPv,initialPos2)
-    print pvScan.timestamp(1), 'Moving %s back to initial position: %f' %(motor3Pv.pvname,initialPos3)
+    motor2.put(initialPos2)
+    print pvScan.timestamp(1), 'Moving %s back to initial position: %f' %(motor3.pvname,initialPos3)
     pvScan.msgPv.put('Moving motor 3 back to initial position')
-    motor3Pv.put(initialPos3)
-    pvScan.motorWait(motor3RBVPv,initialPos3)
+    motor3.put(initialPos3)
 
 def scanRoutine():
     "This is the scan routine"
@@ -223,7 +188,7 @@ def scanRoutine():
     # Make sure shutters are closed
     #pvScan.shutterCheck(shutterRBVPVList)
     # Do motor scan 
-    uedDAEMotorScan(motor1Pv,motor1RBVPv,motor1Start,motor1Stop,motor1NSteps,motor1Offset,motor2Pv,motor2RBVPv,motor2Offset,motor3Pv,motor3RBVPv,motor3Offset,radius,resetFlag,resetMotorPv,grabImagesFlag,nResets,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras='',settleTime=0.5)
+    uedDAEMotorScan(motor1,motor2,motor3,radius,resetFlag,motor1,grabImagesFlag,nResets,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras='',settleTime=0.5)
     print pvScan.timestamp(1), 'Closing shutters'
     pvScan.msgPv.put('Closing shutters')
     # Close shutters and set back to Soft Mode
