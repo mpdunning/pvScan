@@ -80,7 +80,7 @@ class PolluxMotor(Motor):
         Motor.put(self,value)
         self.go.put(1)
 
-def grabImages(grabImagesN,cameraPvPrefix,grabImagesFilepath,grabImagesPlugin='TIFF1',grabImagesFilenameExtras='',pause=0.5):
+def grabImages(grabImagesN,cameraPvPrefix,grabImagesFilepath,grabImagesPlugin='TIFF1',grabImagesFilenameExtras='',grabImagesWriteSettingsFlag=1,grabImagesSettingsPvList=[],pause=0.5):
     "Grabs n images from camera"
     print timestamp(1), 'Grabbing %d images from %s...' % (grabImagesN,cameraPvPrefix)
     msgPv.put('Grabbing ' + str(grabImagesN) + 'images...')
@@ -101,16 +101,37 @@ def grabImages(grabImagesN,cameraPvPrefix,grabImagesFilepath,grabImagesPlugin='T
     PV(imagePvPrefix+':FileWriteMode').put(1)
     PV(imagePvPrefix+':NumCapture').put(1)
     PV(imagePvPrefix+':AutoSave').put(1)
-    if PV(cameraPvPrefix+':cam1:Acquire.RVAL').get():
+    if PV(cameraPvPrefix+':cam1:Acquire.RVAL').get(): # Test whether camera is acquiring
         for i in range(grabImagesN):
             imageFilenameTemplate='%s%s_' + timestamp(1) + '_%3.3d' + fileExt
             PV(imagePvPrefix+':FileTemplate').put(imageFilenameTemplate)
             PV(imagePvPrefix+':Capture').put(1,wait=True)
-        printSleep(pause)
-    else:
-        print timestamp(1), 'Failed: Camera not acquiring'
-        msgPv.put('Failed: Camera not acquiring')
-        raise Exception('Camera not acquiring')
+    else: # If cam not acquiring, try to turn acquisition on
+        PV(cameraPvPrefix+':cam1:Acquire').put(1) # Try to turn acquisition on
+        sleep(0.2)
+        if not PV(cameraPvPrefix+':cam1:Acquire.RVAL').get():
+            # If unable to acquire, raise exception & quit
+            print timestamp(1), 'Failed: Camera not acquiring'
+            msgPv.put('Failed: Camera not acquiring')
+            raise Exception('Camera not acquiring')
+    if grabImagesWriteSettingsFlag:
+        # Write camera settings to file
+        settingsFile=grabImagesFilepath + 'cameraSettings-' + timestamp() + '.txt'
+        if grabImagesSettingsPvList==[]:
+            pvlist=['cam1:BI:NAME.DESC','cam1:AcquireTime','cam1:Gain','cam1:TriggerMode_RBV','cam1:ArraySizeX_RBV','cam1:SizeY_RBV','cam1:ShutterStatus_RBV','cam1:TemperatureActual']
+            for i in xrange(len(pvlist)):
+                pvlist[i]= cameraPvPrefix + ':' + pvlist[i]
+        else:
+            pvlist=grabImagesSettingsPvList
+        with open(settingsFile, 'w') as datafile:
+            datafile.write('Camera settings for ' + cameraPvPrefix + '\n')
+            datafile.write(timestamp() + '\n')
+            datafile.write('-----------------------------------------------------------\n')
+            for pv in pvlist:
+                datafile.write(str(PV(pv).pvname) + ' ')
+                datafile.write(str(PV(pv).value) + '\n')
+            datafile.write('\n')
+    printSleep(pause)
 
 def motor1DScan(motorPv,start,stop,motorRBVPv,nSteps,grabImagesFlag=0,grabImagesN=0,grabImagesSource='',grabImagesFilepath='~/pvScan/images/',grabImagesPlugin='TIFF1',grabImagesFilenameExtras='',settleTime=0.5):
     "Scans motor from start to stop in n steps, optionally grabbing images at each step."

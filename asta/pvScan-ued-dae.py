@@ -97,6 +97,7 @@ grabImagesN=PV(pvPrefix + ':GRABIMAGES:N').get()
 grabImagesFilepath=filepath + 'images/'
 grabImagesPlugin='TIFF1'
 grabImagesSource='ANDOR1'
+grabImagesSettingsPvList=['ANDOR1:cam1:PortName_RBV','ANDOR1:cam1:ArraySizeX_RBV','ANDOR1:cam1:ArraySizeY_RBV','ANDOR1:cam1:AndorADCSpeed_RBV','ANDOR1:cam1:AcquireTime_RBV','ANDOR1:cam1:AndorEMGain_RBV','ANDOR1:cam1:AndorEMGainMode_RBV','ANDOR1:cam1:TriggerMode_RBV','ANDOR1:cam1:ShutterStatus_RBV','ANDOR1:cam1:TemperatureActual']
 #-------------------------------------------------------------
 
 # --- For UED  --------------------------
@@ -122,7 +123,7 @@ def uedDAEReset(resetMotorPv='',grabImagesFlag=0,grabImagesN=0,grabImagesSource=
     if grabImagesFlag:
         if resetMotorPv:
             grabImagesFilenameExtras='_Pitch-' + str(resetMotorPv.get())
-        pvScan.grabImages(grabImagesN,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras,pause)
+        pvScan.grabImages(grabImagesN,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras,grabImagesWriteSettingsFlag=1,grabImagesSettingsPvList,pause=pause)
     #printSleep(pause)
     # Disable shutters 
     print pvScan.timestamp(1), 'Disabling shutters'
@@ -163,7 +164,7 @@ def uedDAEMotorScan(motor1,motor2,motor3,radius=0,resetFlag=0,resetMotorPv='',gr
         pvScan.printSleep(settleTime,'Settling')
         # Do reset loop if resetFlag==1
         if resetFlag:
-            uedDAEReset(motorPv,grabImagesFlag,grabImagesN,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras,pause=0.5)
+            uedDAEReset(resetMotorPv,grabImagesFlag,grabImagesN,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras,pause=0.5)
     # Move motors back to initial positions
     print pvScan.timestamp(1), 'Moving %s back to initial position: %f' %(motor1.pvname,initialPos1)
     pvScan.msgPv.put('Moving motor 1 back to initial position')
@@ -188,7 +189,7 @@ def scanRoutine():
     # Make sure shutters are closed
     #pvScan.shutterCheck(shutterRBVPVList)
     # Do motor scan 
-    uedDAEMotorScan(motor1,motor2,motor3,radius,resetFlag,motor1,grabImagesFlag,nResets,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras='',settleTime=0.5)
+    uedDAEMotorScan(motor1,motor2,motor3,radius,resetFlag,resetMotorPv,grabImagesFlag,nResets,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras='',settleTime=0.5)
     print pvScan.timestamp(1), 'Closing shutters'
     pvScan.msgPv.put('Closing shutters')
     # Close shutters and set back to Soft Mode
