@@ -34,34 +34,28 @@ motor4=pvScan.Motor(4,'MOTR:AS01:MC02:CH7:MOTOR')  # Motor 4 class instance (UED
 motor5=pvScan.Motor(5,'MOTR:AS01:MC01:CH8:MOTOR')  # Motor 5 class instance (UED Delay motor)
 #
 # Shutters.  Make a list for each group, to use shutterFunction()
-shutter1TTLEnablePv=PV('ASTA:LSC01:TTL:IN:HIGH')
-shutter2TTLEnablePv=PV('ASTA:LSC02:TTL:IN:HIGH')
-shutter3TTLEnablePv=PV('ASTA:LSC03:TTL:IN:HIGH')
-shutterTTLEnablePVList=[shutter1TTLEnablePv,shutter2TTLEnablePv,shutter3TTLEnablePv]
-shutter1TTLDisablePv=PV('ASTA:LSC01:TTL:IN:DISABLE')
-shutter2TTLDisablePv=PV('ASTA:LSC02:TTL:IN:DISABLE')
-shutter3TTLDisablePv=PV('ASTA:LSC03:TTL:IN:DISABLE')
-shutterTTLDisablePVList=[shutter1TTLDisablePv,shutter2TTLDisablePv,shutter3TTLDisablePv]
-shutter1OpenPv=PV('ASTA:LSC01:OC:OPEN')
-shutter2OpenPv=PV('ASTA:LSC02:OC:OPEN')
-shutter3OpenPv=PV('ASTA:LSC03:OC:OPEN')
-shutterOpenPVList=[shutter1OpenPv,shutter2OpenPv,shutter3OpenPv]
-shutter1ClosePv=PV('ASTA:LSC01:OC:CLOSE')
-shutter2ClosePv=PV('ASTA:LSC02:OC:CLOSE')
-shutter3ClosePv=PV('ASTA:LSC03:OC:CLOSE')
-shutterClosePVList=[shutter1ClosePv,shutter2ClosePv,shutter3ClosePv]
+shutter1=pvScan.LSCShutter('ASTA:LSC01') # Shutter 1 class instance (UED Drive laser)
+shutter2=pvScan.LSCShutter('ASTA:LSC02') # Shutter 2 class instance (UED pump laser)
+shutter3=pvScan.LSCShutter('ASTA:LSC03') # Shutter 3 class instance (UED HeNe laser)
+shutterList=[shutter1,shutter2,shutter3]
+shutterTTLEnablePVList=[]
+shutterTTLDisablePVList=[]
+shutterOpenPVList=[]
+shutterClosePVList=[]
+shutterSoftPVList=[]
+shutterFastPVList=[]
+for i in xrange(len(shutterList)):
+    shutterTTLEnablePVList.append(shutterList[i].ttlInEnable)
+    shutterTTLDisablePVList.append(shutterList[i].ttlInDisable)
+    shutterOpenPVList.append(shutterList[i].open)
+    shutterClosePVList.append(shutterList[i].close)
+    shutterSoftPVList.append(shutterList[i].soft)
+    shutterFastPVList.append(shutterList[i].fast)
+# Shutter RBVs
 shutter1RBVPv=PV('ADC:AS01:12:V')
 shutter2RBVPv=PV('ADC:AS01:13:V')
 shutter3RBVPv=PV('ADC:AS01:14:V')
 shutterRBVPVList=[shutter1RBVPv,shutter2RBVPv,shutter3RBVPv]
-shutter1FastPv=PV('ASTA:LSC01:MODE:FAST')
-shutter2FastPv=PV('ASTA:LSC02:MODE:FAST')
-shutter3FastPv=PV('ASTA:LSC03:MODE:FAST')
-shutterFastPVList=[shutter1FastPv,shutter2FastPv,shutter3FastPv]
-shutter1SoftPv=PV('ASTA:LSC01:MODE:SOFT')
-shutter2SoftPv=PV('ASTA:LSC02:MODE:SOFT')
-shutter3SoftPv=PV('ASTA:LSC03:MODE:SOFT')
-shutterSoftPVList=[shutter1SoftPv,shutter2SoftPv,shutter3SoftPv]
 #
 # ADC values
 #lsrpwrPv=PV('ESB:A01:ADC1:AI:CH3')
@@ -116,9 +110,9 @@ def uedDAEReset(resetMotorPv='',grabImagesFlag=0,grabImagesN=0,grabImagesSource=
     # Enable shutters: open shutters 1 and 2, enable TTL In for shutter 3 
     print pvScan.timestamp(1), 'Enabling shutters'
     pvScan.msgPv.put('Enabling shutters')
-    shutter1OpenPv.put(1)
-    shutter2OpenPv.put(1)
-    shutter3TTLEnablePv.put(1)
+    shutter1.open.put(1)
+    shutter2.open.put(1)
+    shutter3.ttlInEnable.put(1)
     pvScan.printSleep(pause)
     if grabImagesFlag:
         if resetMotorPv:

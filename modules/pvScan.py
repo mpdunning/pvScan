@@ -5,16 +5,21 @@ from time import sleep
 import datetime,math,os,sys
 import subprocess
 
-# PV prefix of pvScan IOC
-pvPrefix=os.environ['PVSCAN_PVPREFIX']
+try:
+    # PV prefix of pvScan IOC
+    pvPrefix=os.environ['PVSCAN_PVPREFIX']
+    # PV for status message
+    msgPv=PV(pvPrefix + ':MSG')
+    # Get PID for abort button
+    pid=os.getpid()
+    pidPV=PV(pvPrefix + ':PID')
+    pidPV.put(pid)
+except KeyError:
+    print 'Warning: PVSCAN_PVPREFIX not defined. Continuing...'
+    pvPrefix=''
+    msgPv=PV(pvPrefix + ':MSG')
+    pidPV=PV(pvPrefix + ':PID')
 
-# PV for status message
-msgPv=PV(pvPrefix + ':MSG')
-
-# Get PID for abort button
-pid=os.getpid()
-pidPV=PV(pvPrefix + ':PID')
-pidPV.put(pid)
 
 ##################################################################################################################
 
@@ -80,6 +85,34 @@ class PolluxMotor(Motor):
         Motor.put(self,value)
         self.go.put(1)
 
+class Shutter(PV):
+    "Shutter class which inherits from pyEpics PV class."
+    def __init__(self,pvname):
+        PV.__init__(self,pvname)
+
+class LSCShutter(Shutter):
+    "Lambda SC shutter class which inherits from Shutter class."
+    def __init__(self,pvname):
+        Shutter.__init__(self,pvname)
+        self.OCStatus=PV(':'.join(pvname.split(':')[0:2]) + ':STATUS:OC')
+        self.ttlInEnable=PV(':'.join(pvname.split(':')[0:2]) + ':TTL:IN:HIGH')
+        self.ttlInDisable=PV(':'.join(pvname.split(':')[0:2]) + ':TTL:IN:DISABLE')
+        self.open=PV(':'.join(pvname.split(':')[0:2]) + ':OC:OPEN')
+        self.close=PV(':'.join(pvname.split(':')[0:2]) + ':OC:CLOSE')
+        self.soft=PV(':'.join(pvname.split(':')[0:2]) + ':MODE:SOFT')
+        self.fast=PV(':'.join(pvname.split(':')[0:2]) + ':MODE:FAST')
+
+class DummyShutter(Shutter):
+    "Dummy shutter class which inherits from Shutter class. For testing only."
+    def __init__(self,pvname):
+        Shutter.__init__(self,pvname)
+        self.ttlInEnable=PV(pvname)
+        self.ttlInDisable=PV(pvname)
+        self.open=PV(pvname)
+        self.close=PV(pvname)
+        self.soft=PV(pvname)
+        self.fast=PV(pvname)
+
 def grabImages(grabImagesN,cameraPvPrefix,grabImagesFilepath,grabImagesPlugin='TIFF1',grabImagesFilenameExtras='',grabImagesWriteSettingsFlag=1,grabImagesSettingsPvList=[],pause=0.5):
     "Grabs n images from camera"
     print timestamp(1), 'Grabbing %d images from %s...' % (grabImagesN,cameraPvPrefix)
@@ -108,7 +141,7 @@ def grabImages(grabImagesN,cameraPvPrefix,grabImagesFilepath,grabImagesPlugin='T
             PV(imagePvPrefix+':Capture').put(1,wait=True)
     else: # If cam not acquiring, try to turn acquisition on
         PV(cameraPvPrefix+':cam1:Acquire').put(1) # Try to turn acquisition on
-        sleep(0.2)
+        sleep(0.5)
         if not PV(cameraPvPrefix+':cam1:Acquire.RVAL').get():
             # If unable to acquire, raise exception & quit
             print timestamp(1), 'Failed: Camera not acquiring'

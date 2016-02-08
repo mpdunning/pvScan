@@ -34,34 +34,28 @@ motor4=pvScan.Motor(4,'ESB:XPS1:m4:MOTR')  # Motor 4 class instance (UED X motor
 motor5=pvScan.Motor(5,'ESB:XPS2:m1:MOTR')  # Motor 5 class instance (UED Delay motor)
 #
 # Shutters.  Make a list for each group, to use shutterFunction()
-shutter1TTLEnablePv=PV('ESB:GP01:VAL01')
-shutter2TTLEnablePv=PV('ESB:GP01:VAL02')
-shutter3TTLEnablePv=PV('ESB:GP01:VAL03')
-shutterTTLEnablePVList=[shutter1TTLEnablePv,shutter2TTLEnablePv,shutter3TTLEnablePv]
-shutter1TTLDisablePv=PV('ESB:GP01:VAL01')
-shutter2TTLDisablePv=PV('ESB:GP01:VAL02')
-shutter3TTLDisablePv=PV('ESB:GP01:VAL03')
-shutterTTLDisablePVList=[shutter1TTLDisablePv,shutter2TTLDisablePv,shutter3TTLDisablePv]
-shutter1OpenPv=PV('ESB:GP01:VAL01')
-shutter2OpenPv=PV('ESB:GP01:VAL02')
-shutter3OpenPv=PV('ESB:GP01:VAL03')
-shutterOpenPVList=[shutter1OpenPv,shutter2OpenPv,shutter3OpenPv]
-shutter1ClosePv=PV('ESB:GP01:VAL01')
-shutter2ClosePv=PV('ESB:GP01:VAL02')
-shutter3ClosePv=PV('ESB:GP01:VAL03')
-shutterClosePVList=[shutter1ClosePv,shutter2ClosePv,shutter3ClosePv]
+shutter1=pvScan.DummyShutter('ESB:GP01:VAL01') # Shutter 1 class instance (UED Drive laser)
+shutter2=pvScan.DummyShutter('ESB:GP01:VAL02') # Shutter 2 class instance (UED pump laser)
+shutter3=pvScan.DummyShutter('ESB:GP01:VAL03') # Shutter 3 class instance (UED HeNe laser)
+shutterList=[shutter1,shutter2,shutter3]
+shutterTTLEnablePVList=[]
+shutterTTLDisablePVList=[]
+shutterOpenPVList=[]
+shutterClosePVList=[]
+shutterSoftPVList=[]
+shutterFastPVList=[]
+for i in xrange(len(shutterList)):
+    shutterTTLEnablePVList.append(shutterList[i].ttlInEnable)
+    shutterTTLDisablePVList.append(shutterList[i].ttlInDisable)
+    shutterOpenPVList.append(shutterList[i].open)
+    shutterClosePVList.append(shutterList[i].close)
+    shutterSoftPVList.append(shutterList[i].soft)
+    shutterFastPVList.append(shutterList[i].fast)
+# Shutter RBVs
 shutter1RBVPv=PV('ESB:GP01:VAL01')
 shutter2RBVPv=PV('ESB:GP01:VAL02')
 shutter3RBVPv=PV('ESB:GP01:VAL03')
 shutterRBVPVList=[shutter1RBVPv,shutter2RBVPv,shutter3RBVPv]
-shutter1FastPv=PV('ESB:GP01:VAL01')
-shutter2FastPv=PV('ESB:GP01:VAL02')
-shutter3FastPv=PV('ESB:GP01:VAL03')
-shutterFastPVList=[shutter1FastPv,shutter2FastPv,shutter3FastPv]
-shutter1SoftPv=PV('ESB:GP01:VAL01')
-shutter2SoftPv=PV('ESB:GP01:VAL02')
-shutter3SoftPv=PV('ESB:GP01:VAL03')
-shutterSoftPVList=[shutter1SoftPv,shutter2SoftPv,shutter3SoftPv]
 #
 # ADC values
 #lsrpwrPv=PV('ESB:A01:ADC1:AI:CH3')
@@ -72,7 +66,7 @@ shutterSoftPVList=[shutter1SoftPv,shutter2SoftPv,shutter3SoftPv]
 pause1=1.0  # sec
 
 #---- For data logging --------------------------
-pvList=[shutter1TTLEnablePv,shutter2TTLEnablePv,shutter3TTLEnablePv,motor1.rbv,motor2.rbv,motor3.rbv,motor4.rbv,motor5.rbv] # list of PVs to be monitored during scan
+pvList=[shutter1RBVPv,shutter2RBVPv,shutter3RBVPv,motor1.rbv,motor2.rbv,motor3.rbv,motor4.rbv,motor5.rbv] # list of PVs to be monitored during scan
 expName=PV(pvPrefix + ':IOC.DESC').get()
 if ' ' in expName: expName=expName.replace(' ','_')
 now=datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
