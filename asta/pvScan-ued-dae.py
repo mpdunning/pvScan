@@ -27,11 +27,11 @@ sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/R2.0/modules/')
 import pvScan
 
 # Motors
-motor1=pvScan.PolluxMotor(1,'ASTA:POLX01:AO:ABSMOV')  # Motor 1 class instance (UED pitch motor)
-motor2=pvScan.Motor(2,'MOTR:AS01:MC02:CH8:MOTOR')  # Motor 2 class instance (UED Y motor)
-motor3=pvScan.Motor(3,'MOTR:AS01:MC02:CH2:MOTOR')  # Motor 3 class instance (UED Z motor)
-motor4=pvScan.Motor(4,'MOTR:AS01:MC02:CH7:MOTOR')  # Motor 4 class instance (UED X motor)
-motor5=pvScan.Motor(5,'MOTR:AS01:MC01:CH8:MOTOR')  # Motor 5 class instance (UED Delay motor)
+motor1=pvScan.PolluxMotor('ASTA:POLX01:AO:ABSMOV',1)  # Motor 1 class instance (UED pitch motor)
+motor2=pvScan.Motor('MOTR:AS01:MC02:CH8:MOTOR',2)  # Motor 2 class instance (UED Y motor)
+motor3=pvScan.Motor('MOTR:AS01:MC02:CH2:MOTOR',3)  # Motor 3 class instance (UED Z motor)
+motor4=pvScan.Motor('MOTR:AS01:MC02:CH7:MOTOR',4)  # Motor 4 class instance (UED X motor)
+motor5=pvScan.Motor('MOTR:AS01:MC01:CH8:MOTOR',5)  # Motor 5 class instance (UED Delay motor)
 #
 # Shutters.  Make a list for each group, to use shutterFunction()
 shutter1=pvScan.LSCShutter('ASTA:LSC01') # Shutter 1 class instance (UED Drive laser)

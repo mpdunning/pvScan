@@ -27,11 +27,11 @@ sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/prod/modules/')
 import pvScan
 
 # Motors
-motor1=pvScan.Motor(1,'ESB:XPS1:m3:MOTR')  # Motor 1 class instance (UED pitch motor)
-motor2=pvScan.Motor(2,'ESB:XPS1:m6:MOTR')  # Motor 2 class instance (UED Y motor)
-motor3=pvScan.Motor(3,'ESB:XPS1:m7:MOTR')  # Motor 3 class instance (UED Z motor)
-motor4=pvScan.Motor(4,'ESB:XPS1:m4:MOTR')  # Motor 4 class instance (UED X motor)
-motor5=pvScan.Motor(5,'ESB:XPS2:m1:MOTR')  # Motor 5 class instance (UED Delay motor)
+motor1=pvScan.Motor('ESB:XPS1:m3:MOTR',1)  # Motor 1 class instance (UED pitch motor)
+motor2=pvScan.Motor('ESB:XPS1:m6:MOTR',2)  # Motor 2 class instance (UED Y motor)
+motor3=pvScan.Motor('ESB:XPS1:m7:MOTR',3)  # Motor 3 class instance (UED Z motor)
+motor4=pvScan.Motor('ESB:XPS1:m4:MOTR',4)  # Motor 4 class instance (UED X motor)
+motor5=pvScan.Motor('ESB:XPS2:m1:MOTR',5)  # Motor 5 class instance (UED Delay motor)
 #
 # Shutters.  Make a list for each group, to use shutterFunction()
 shutter1=pvScan.DummyShutter('ESB:GP01:VAL01') # Shutter 1 class instance (UED Drive laser)

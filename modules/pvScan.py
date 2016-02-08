@@ -45,15 +45,16 @@ class Tee(object):
         
 class Motor(PV):
     "Motor class which inherits from pyEpics PV class."
-    def __init__(self,motorNumber,pvname):
+    def __init__(self,pvname,motorNumber=0):
         PV.__init__(self,pvname)
         self.motorNumber=motorNumber
         self.rbv=PV(pvname + '.RBV')
         self.velo=PV(pvname + '.VELO')
-        self.start= PV(pvPrefix + ':MOTOR' + str(self.motorNumber) + ':START').get()
-        self.stop= PV(pvPrefix + ':MOTOR' + str(self.motorNumber) + ':STOP').get()
-        self.nsteps= PV(pvPrefix + ':MOTOR' + str(self.motorNumber) + ':NSTEPS').get()
-        self.offset= PV(pvPrefix + ':MOTOR' + str(self.motorNumber) + ':OFFSET').get()
+        if motorNumber:
+            self.start= PV(pvPrefix + ':MOTOR' + str(self.motorNumber) + ':START').get()
+            self.stop= PV(pvPrefix + ':MOTOR' + str(self.motorNumber) + ':STOP').get()
+            self.nsteps= PV(pvPrefix + ':MOTOR' + str(self.motorNumber) + ':NSTEPS').get()
+            self.offset= PV(pvPrefix + ':MOTOR' + str(self.motorNumber) + ':OFFSET').get()
 
     def motorWait(self,val,delta=0.005,timeout=180.0):
         "Waits until motor has stopped to proceed."
@@ -75,8 +76,8 @@ class Motor(PV):
 
 class PolluxMotor(Motor):
     "Motor class which inherits from pvScan Motor class."
-    def __init__(self,motorNumber,pvname):
-        Motor.__init__(self,motorNumber,pvname)
+    def __init__(self,pvname,motorNumber=0):
+        Motor.__init__(self,pvname,motorNumber)
         self.rbv=PV(':'.join(pvname.split(':')[0:2]) + ':AI:ACTPOS')
         self.velo=PV(':'.join(pvname.split(':')[0:2]) + ':AO:VELO')
         self.go=PV(':'.join(pvname.split(':')[0:2]) + ':BO:GOABS')
