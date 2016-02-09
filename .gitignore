@@ -1,5 +1,8 @@
 *.pyc
 *.bak
+*.swx
+*.swn
+*.swo
 testEpicsMotorClass.py
 testMyMotorClass.py
 

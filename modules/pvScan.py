@@ -69,7 +69,7 @@ class Motor(PV):
             print "Motor %s RBV is invalid, pausing for %f seconds." %(self.pvname,timeout)
             sleep(timeout)
 
-    def put(self,value,wait=True,timeout=180.0):
+    def move(self,value,wait=True,timeout=180.0):
         PV.put(self,value)
         if wait:
             Motor.motorWait(self,value,timeout=timeout)
@@ -82,9 +82,12 @@ class PolluxMotor(Motor):
         self.velo=PV(':'.join(pvname.split(':')[0:2]) + ':AO:VELO')
         self.go=PV(':'.join(pvname.split(':')[0:2]) + ':BO:GOABS')
     
-    def put(self,value,wait=True,timeout=180.0):
-        Motor.put(self,value)
+    def move(self,value,wait=True,timeout=180.0):
+        PV.put(self,value)
+        sleep(0.2)
         self.go.put(1)
+        if wait:
+            Motor.motorWait(self,value,timeout=timeout)
 
 class Shutter(PV):
     "Shutter class which inherits from pyEpics PV class."
@@ -167,27 +170,25 @@ def grabImages(grabImagesN,cameraPvPrefix,grabImagesFilepath,grabImagesPlugin='T
             datafile.write('\n')
     printSleep(pause)
 
-def motor1DScan(motorPv,start,stop,motorRBVPv,nSteps,grabImagesFlag=0,grabImagesN=0,grabImagesSource='',grabImagesFilepath='~/pvScan/images/',grabImagesPlugin='TIFF1',grabImagesFilenameExtras='',settleTime=0.5):
+def motor1DScan(motor,grabImagesFlag=0,grabImagesN=0,grabImagesSource='',grabImagesFilepath='~/pvScan/images/',grabImagesPlugin='TIFF1',grabImagesFilenameExtras='',settleTime=0.5):
     "Scans motor from start to stop in n steps, optionally grabbing images at each step."
-    initialPos=motorPv.get()
+    initialPos=motor.get()
     print timestamp(1), 'Starting motor scan'
     msgPv.put('Starting motor scan')
-    inc=(stop-start)/(nSteps-1)
-    for i in range(nSteps):
-        newPos=start + i*inc
-        print timestamp(1), 'Moving %s to %f' % (motorPv.pvname,newPos)
+    inc=(motor.stop-motor.start)/(motor.nsteps-1)
+    for i in range(motor.nsteps):
+        newPos=motor.start + i*inc
+        print timestamp(1), 'Moving %s to %f' % (motor.pvname,newPos)
         msgPv.put('Moving motor')
-        motorPv.put(newPos)
-        motorWait(motorRBVPv,newPos)
+        motor.move(newPos)
         printSleep(settleTime,'Settling')
         if grabImagesFlag:
-            grabImagesFilenameExtras='_MotorPos-' + str(motorPv.get())
+            grabImagesFilenameExtras='_MotorPos-' + str(motor.get())
             grabImages(grabImagesN,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras)
     # Move motor back to initial positions
-    print timestamp(1), 'Moving %s back to initial position: %f' %(motorPv.pvname,initialPos)
+    print timestamp(1), 'Moving %s back to initial position: %f' %(motor.pvname,initialPos)
     msgPv.put('Moving motor back to initial position')
-    motorPv.put(initialPos)
-    motorWait(motorRBVPv,initialPos)
+    motor.move(initialPos)
 
 def shutterFunction(shutterPVList,pvVal=1,wait=True):
     "Opens, Closes, or Enables/Disables TTL Input for shutters, depending on which PVs are passed in. Takes a list of PVs as an argument."

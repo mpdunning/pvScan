@@ -28,12 +28,12 @@ pid=pidPV.get()
 msgpv=PV(pvPrefix + ':MSG')
 
 # Motors to be stopped
-motor1='ESB:XPS1:m4'
-motor1Stop=PV(motor1 + ':MOTR.STOP')
+motor1='ESB:XPS1:m4:MOTR'
+motor1Stop=PV(motor1 + '.STOP')
 
 # Shutters to be inserted
-laserShutter1Pv=PV('ESB:THSC01:SHUTTER:OC')
-laserShutter2Pv=PV('ESB:BO:2124-8:BIT5')
+laserShutter1Pv=PV('ESB:GP01:VAL01')
+laserShutter2Pv=PV('ESB:GP01:VAL02')
 
 
 ##################################################################################################################            

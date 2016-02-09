@@ -117,7 +117,7 @@ def uedDAEReset(resetMotorPv='',grabImagesFlag=0,grabImagesN=0,grabImagesSource=
     if grabImagesFlag:
         if resetMotorPv:
             grabImagesFilenameExtras='_Pitch-' + str(resetMotorPv.get())
-        pvScan.grabImages(grabImagesN,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras,grabImagesWriteSettingsFlag=1,grabImagesSettingsPvList,pause=pause)
+        pvScan.grabImages(grabImagesN,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras,grabImagesWriteSettingsFlag=1,grabImagesSettingsPvList=grabImagesSettingsPvList,pause=pause)
     #printSleep(pause)
     # Disable shutters 
     print pvScan.timestamp(1), 'Disabling shutters'
@@ -144,17 +144,17 @@ def uedDAEMotorScan(motor1,motor2,motor3,radius=0,resetFlag=0,resetMotorPv='',gr
         newPos1=newPos0 + motor1.offset
         print pvScan.timestamp(1), 'Moving %s to %f' % (motor1.pvname,newPos1)
         pvScan.msgPv.put('Moving motor 1')
-        motor1.put(newPos1,timeout=30)
+        motor1.move(newPos1,timeout=30)
         # Move motor 2
         newPos2=motor2.offset + radius*math.cos(newPos0*math.pi/180)
         print pvScan.timestamp(1), 'Moving %s to %f' % (motor2.pvname,newPos2)
         pvScan.msgPv.put('Moving motor 2')
-        motor2.put(newPos2)
+        motor2.move(newPos2)
         # Move motor 3
         newPos3=motor3.offset + radius*math.sin(newPos0*math.pi/180)
         print pvScan.timestamp(1), 'Moving %s to %f' % (motor3.pvname,newPos3)
         pvScan.msgPv.put('Moving motor 3')
-        motor3.put(newPos3)
+        motor3.move(newPos3)
         pvScan.printSleep(settleTime,'Settling')
         # Do reset loop if resetFlag==1
         if resetFlag:
@@ -162,13 +162,13 @@ def uedDAEMotorScan(motor1,motor2,motor3,radius=0,resetFlag=0,resetMotorPv='',gr
     # Move motors back to initial positions
     print pvScan.timestamp(1), 'Moving %s back to initial position: %f' %(motor1.pvname,initialPos1)
     pvScan.msgPv.put('Moving motor 1 back to initial position')
-    motor1.put(initialPos1)
+    motor1.move(initialPos1)
     print pvScan.timestamp(1), 'Moving %s back to initial position: %f' %(motor2.pvname,initialPos2)
     pvScan.msgPv.put('Moving motor 2 back to initial position')
-    motor2.put(initialPos2)
+    motor2.move(initialPos2)
     print pvScan.timestamp(1), 'Moving %s back to initial position: %f' %(motor3.pvname,initialPos3)
     pvScan.msgPv.put('Moving motor 3 back to initial position')
-    motor3.put(initialPos3)
+    motor3.move(initialPos3)
 
 def scanRoutine():
     "This is the scan routine"

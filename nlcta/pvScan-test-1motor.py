@@ -27,29 +27,42 @@ sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/R2.0/modules/')
 import pvScan
 
 # Motors
-motor1='ESB:XPS1:m4:MOTR'  # Motor 1 actual PV
-motor1Pv=PV(motor1) # Motor position PV object
-motor1RBVPv=PV(motor1 + '.RBV') # Motor position RBV PV object
-motor1SpeedPv=PV(motor1 + '.VELO') # Motor speed PV object
-motor1Start=PV(pvPrefix + ':MOTOR1:START').get()  # for scanning
-motor1Stop=PV(pvPrefix + ':MOTOR1:STOP').get()  # for scanning
-motor1NSteps=PV(pvPrefix + ':MOTOR1:NSTEPS').get()  # for scanning
-motor1Speed=PV(pvPrefix + ':MOTOR1:SPEED').get()  # for scanning
-# Stoppers/screens
-laserShutter1Pv=PV('ESB:THSC01:SHUTTER:OC')
-laserShutter2Pv=PV('ESB:BO:2124-8:BIT5')
-screenPv=PV('ESB:BO:2114-1:BIT5')
+motor1=pvScan.Motor('ESB:XPS1:m4:MOTR',1)  # Motor 1 class instance (UED pitch motor)
+#
+# Shutters.  Make a list for each group, to use shutterFunction()
+shutter1=pvScan.DummyShutter('ESB:GP01:VAL01') # Shutter 1 class instance (UED Drive laser)
+shutter2=pvScan.DummyShutter('ESB:GP01:VAL02') # Shutter 2 class instance (UED pump laser)
+shutter3=pvScan.DummyShutter('ESB:GP01:VAL03') # Shutter 3 class instance (UED HeNe laser)
+shutterList=[shutter1,shutter2,shutter3]
+shutterTTLEnablePVList=[]
+shutterTTLDisablePVList=[]
+shutterOpenPVList=[]
+shutterClosePVList=[]
+shutterSoftPVList=[]
+shutterFastPVList=[]
+for i in xrange(len(shutterList)):
+    shutterTTLEnablePVList.append(shutterList[i].ttlInEnable)
+    shutterTTLDisablePVList.append(shutterList[i].ttlInDisable)
+    shutterOpenPVList.append(shutterList[i].open)
+    shutterClosePVList.append(shutterList[i].close)
+    shutterSoftPVList.append(shutterList[i].soft)
+    shutterFastPVList.append(shutterList[i].fast)
+# Shutter RBVs
+shutter1RBVPv=PV('ESB:GP01:VAL01')
+shutter2RBVPv=PV('ESB:GP01:VAL02')
+shutter3RBVPv=PV('ESB:GP01:VAL03')
+shutterRBVPVList=[shutter1RBVPv,shutter2RBVPv,shutter3RBVPv]
+#
 # ADC values
-lsrpwrPv=PV('ESB:A01:ADC1:AI:CH3')
-toroid0355Pv=PV('ESB:A01:ADC1:AI:CH4')
-toroid2150Pv=PV('ESB:A01:ADC1:AI:CH5')
-structureChargePv=PV('ESB:A01:ADC1:CALC:CH1:CONV')
+#lsrpwrPv=PV('ESB:A01:ADC1:AI:CH3')
+#toroid0355Pv=PV('ESB:A01:ADC1:AI:CH4')
+#toroid2150Pv=PV('ESB:A01:ADC1:AI:CH5')
+#structureChargePv=PV('ESB:A01:ADC1:CALC:CH1:CONV')
 
 pause1=1.0  # sec
 
 #---- For data logging --------------------------
-#pvList=[lsrpwrPv,toroid0355Pv,toroid2150Pv,structureChargePv,laserShutter1Pv,laserShutter2Pv,screenPv,motor1SpeedPv,motor1RBVPv,motor2RBVPv,motor3RBVPv,foilstageRBVPv]
-pvList=[laserShutter1Pv,laserShutter2Pv,screenPv,motor1RBVPv] # list of PVs to be monitored during scan
+pvList=[shutter1RBVPv,shutter2RBVPv,shutter3RBVPv,motor1.rbv] # list of PVs to be monitored during scan
 expName=PV(pvPrefix + ':IOC.DESC').get()
 if ' ' in expName: expName=expName.replace(' ','_')
 now=datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -83,35 +96,35 @@ def scanRoutine():
     print pvScan.timestamp(1), 'Starting'
     pvScan.msgPv.put('Starting')
     sleep(pause1)
-    # block laser
-    #print pvScan.timestamp(1), 'Blocking laser'
-    #laserShutter1Pv.put(0)
-    #laserShutter2Pv.put(0)  # just in case
+    # Open shutters
+    print pvScan.timestamp(1), 'Opening shutters'
+    pvScan.msgPv.put('Opening shutters')
+    pvScan.shutterFunction(shutterOpenPVList,1)
     # remove profile monitor screen
     #print pvScan.timestamp(1), 'Removing screen'
     #screenPv.put(0)
     # Scan delay stage and grab images...
-    pvScan.motor1DScan(motor1Pv,motor1Start,motor1Stop,motor1RBVPv,motor1NSteps,grabImagesFlag,grabImagesN,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras='',settleTime=0.5)
-    # block laser
-    #print pvScan.timestamp(1), 'Blocking laser'
-    #laserShutter1Pv.put(0)
-    #laserShutter2Pv.put(0)  # just in case
+    pvScan.motor1DScan(motor1,grabImagesFlag,grabImagesN,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras='',settleTime=0.5)
+    # Close shutters
+    print pvScan.timestamp(1), 'Closing shutters'
+    pvScan.msgPv.put('Closing shutters')
+    pvScan.shutterFunction(shutterClosePVList,0)
     print pvScan.timestamp(1), 'Done'
     pvScan.msgPv.put('Done')
-
-    
-    
 
 if __name__ == "__main__":
     "Do scan routine; log PV data to file as a separate thread if enabled"
     pvScan.Tee(logFilename, 'w')
-    pvScan.dataFlag=1  # start logging data
+    pvScan.dataFlag=1  # Start logging data
     if dataEnable==1:
         datalogthread=Thread(target=pvScan.datalog,args=(dataInt,dataFilename,pvList,nPtsMax))
         datalogthread.start()
-    scanRoutine()
-    sleep(pause1)
-    pvScan.dataFlag=0  # stop logging data
+    try:
+        scanRoutine()
+        sleep(pause1) # Log data for a little longer
+    finally:
+        pvScan.dataFlag=0  # Stop logging data 
+    
 
         
 ##################################################################################################################
