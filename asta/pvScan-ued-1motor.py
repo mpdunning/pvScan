@@ -112,7 +112,7 @@ def scanRoutine():
 if __name__ == "__main__":
     "Do scan routine; log PV data to file as a separate thread if enabled"
     pvScan.Tee(logFilename, 'w')
-    pvScan.dataFlag=1  # Start logging data
+    pvScan.dataFlag=1  # Start logging data when thread starts
     if dataEnable==1:
         datalogthread=Thread(target=pvScan.datalog,args=(dataInt,dataFilename,pvList,nPtsMax))
         datalogthread.start()

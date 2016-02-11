@@ -130,20 +130,14 @@ def grabImages(grabImagesN,cameraPvPrefix,grabImagesFilepath,grabImagesPlugin='T
     else:
         fileExt='.img'
     PV(imagePvPrefix+':EnableCallbacks').put(1)
-    # PV().put() doesn't seem to work for putting strings to waveforms. Use subprocess.check_call('caput') instead.
-    with open(os.devnull, 'wb') as devnull:
-        subprocess.check_call('caput -t -S ' + cameraPvPrefix + ':' + grabImagesPlugin + ':FilePath ' + grabImagesFilepath, shell=True, stdout=devnull)
-        subprocess.check_call('caput -t -S ' + cameraPvPrefix + ':' + grabImagesPlugin + ':FileName ' + cameraPvPrefix + grabImagesFilenameExtras, shell=True, stdout=devnull)
+    # PV().put() seems to need a null terminator when putting strings to waveforms.
+    PV(imagePvPrefix+':FilePath').put(grabImagesFilepath + '\0')
+    PV(imagePvPrefix+':FileName').put(cameraPvPrefix + grabImagesFilenameExtras + '\0')
     PV(imagePvPrefix+':AutoIncrement').put(1)
     PV(imagePvPrefix+':FileWriteMode').put(1)
     PV(imagePvPrefix+':NumCapture').put(1)
     PV(imagePvPrefix+':AutoSave').put(1)
-    if PV(cameraPvPrefix+':cam1:Acquire.RVAL').get(): # Test whether camera is acquiring
-        for i in range(grabImagesN):
-            imageFilenameTemplate='%s%s_' + timestamp(1) + '_%3.3d' + fileExt
-            PV(imagePvPrefix+':FileTemplate').put(imageFilenameTemplate)
-            PV(imagePvPrefix+':Capture').put(1,wait=True)
-    else: # If cam not acquiring, try to turn acquisition on
+    if not PV(cameraPvPrefix+':cam1:Acquire.RVAL').get(): # If camera is not acquiring...
         PV(cameraPvPrefix+':cam1:Acquire').put(1) # Try to turn acquisition on
         sleep(0.5)
         if not PV(cameraPvPrefix+':cam1:Acquire.RVAL').get():
@@ -151,6 +145,11 @@ def grabImages(grabImagesN,cameraPvPrefix,grabImagesFilepath,grabImagesPlugin='T
             print timestamp(1), 'Failed: Camera not acquiring'
             msgPv.put('Failed: Camera not acquiring')
             raise Exception('Camera not acquiring')
+    for i in range(grabImagesN):
+        # Set FileTemplate PV and then grab image
+        imageFilenameTemplate='%s%s_' + timestamp(1) + '_%3.3d' + fileExt
+        PV(imagePvPrefix+':FileTemplate').put(imageFilenameTemplate + '\0')
+        PV(imagePvPrefix+':Capture').put(1,wait=True)
     if grabImagesWriteSettingsFlag:
         # Write camera settings to file
         settingsFile=grabImagesFilepath + 'cameraSettings-' + timestamp() + '.txt'
@@ -183,7 +182,7 @@ def motor1DScan(motor,grabImagesFlag=0,grabImagesN=0,grabImagesSource='',grabIma
         motor.move(newPos)
         printSleep(settleTime,'Settling')
         if grabImagesFlag:
-            grabImagesFilenameExtras='_MotorPos-' + str(motor.get())
+            grabImagesFilenameExtras='_MotorPos-' + '{0:08.4f}'.format(motor.get())
             grabImages(grabImagesN,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras)
     # Move motor back to initial positions
     print timestamp(1), 'Moving %s back to initial position: %f' %(motor.pvname,initialPos)
@@ -209,6 +208,11 @@ def printSleep(sleepTime,printString='Pausing'):
         print timestamp(1), '%s for %f seconds...' % (printString,sleepTime)
         msgPv.put(printString + ' for ' + str(sleepTime) + ' seconds...')
         sleep(sleepTime)
+
+def print2(string,pv=msgPv):
+    "Prints message to stdout and to message PV."
+    print '%s %s' % (timestamp(1),string)
+    pv.put(string)
 
 def datalog(interval,filename,pvlist,nptsmax):
     "Logs PV data to a file; designed to be run in a separate thread. Uses dataFlag global variable which is shared between threads. PVs must be in pvlist."

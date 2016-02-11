@@ -64,6 +64,7 @@ shutterRBVPVList=[shutter1RBVPv,shutter2RBVPv,shutter3RBVPv]
 #structureChargePv=PV('ESB:A01:ADC1:CALC:CH1:CONV')
 
 pause1=1.0  # sec
+radius2 = -0.60 # --TJL, should be EPICs
 
 #---- For data logging --------------------------
 pvList=[shutter1RBVPv,shutter2RBVPv,shutter3RBVPv,motor1.rbv,motor2.rbv,motor3.rbv,motor4.rbv,motor5.rbv] # list of PVs to be monitored during scan
@@ -116,7 +117,7 @@ def uedDAEReset(resetMotorPv='',grabImagesFlag=0,grabImagesN=0,grabImagesSource=
     pvScan.printSleep(pause)
     if grabImagesFlag:
         if resetMotorPv:
-            grabImagesFilenameExtras='_Pitch-' + str(resetMotorPv.get())
+            grabImagesFilenameExtras='_Pitch-' + '{0:08.4f}'.format(resetMotorPv.get())
         pvScan.grabImages(grabImagesN,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras,grabImagesWriteSettingsFlag=1,grabImagesSettingsPvList=grabImagesSettingsPvList,pause=pause)
     #printSleep(pause)
     # Disable shutters 
@@ -146,12 +147,12 @@ def uedDAEMotorScan(motor1,motor2,motor3,radius=0,resetFlag=0,resetMotorPv='',gr
         pvScan.msgPv.put('Moving motor 1')
         motor1.move(newPos1,timeout=30)
         # Move motor 2
-        newPos2=motor2.offset + radius*math.cos(newPos0*math.pi/180)
+        newPos2=motor2.offset + radius*math.cos(newPos0*math.pi/180) - radius2*math.sin(newPos0*math.pi/180)
         print pvScan.timestamp(1), 'Moving %s to %f' % (motor2.pvname,newPos2)
         pvScan.msgPv.put('Moving motor 2')
         motor2.move(newPos2)
         # Move motor 3
-        newPos3=motor3.offset + radius*math.sin(newPos0*math.pi/180)
+        newPos3=motor3.offset + radius*math.sin(newPos0*math.pi/180) + radius2*math.cos(newPos0*math.pi/180)
         print pvScan.timestamp(1), 'Moving %s to %f' % (motor3.pvname,newPos3)
         pvScan.msgPv.put('Moving motor 3')
         motor3.move(newPos3)
@@ -197,7 +198,7 @@ def scanRoutine():
 if __name__ == "__main__":
     "Do scan routine; log PV data to file as a separate thread if enabled"
     pvScan.Tee(logFilename, 'w')
-    pvScan.dataFlag=1  # Start logging data
+    pvScan.dataFlag=1  # Start logging data when thread starts
     if dataEnable==1:
         datalogthread=Thread(target=pvScan.datalog,args=(dataInt,dataFilename,pvList,nPtsMax))
         datalogthread.start()
