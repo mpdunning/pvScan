@@ -26,13 +26,13 @@ os.environ['PVSCAN_PVPREFIX']=pvPrefix
 sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/R2.0/modules/')
 import pvScan
 
-# Motors
-motor1=pvScan.Motor('MCOR:AS01:113:ISETPT',1)  # class instance (UED Solenoid)
+# Scan PVs
+scanPv1=pvScan.ScanPv('ESB:GP01:VAL04',1)  # ScanPv class instance (UED Solenoid)
 #
 # Shutters.  Make a list for each group, to use shutterFunction()
-shutter1=pvScan.LSCShutter('ASTA:LSC01') # Shutter 1 class instance (UED Drive laser)
-shutter2=pvScan.LSCShutter('ASTA:LSC02') # Shutter 2 class instance (UED pump laser)
-shutter3=pvScan.LSCShutter('ASTA:LSC03') # Shutter 3 class instance (UED HeNe laser)
+shutter1=pvScan.DummyShutter('ESB:GP01:VAL01') # Shutter 1 class instance (UED Drive laser)
+shutter2=pvScan.DummyShutter('ESB:GP01:VAL02') # Shutter 2 class instance (UED pump laser)
+shutter3=pvScan.DummyShutter('ESB:GP01:VAL03') # Shutter 3 class instance (UED HeNe laser)
 shutterList=[shutter1,shutter2,shutter3]
 shutterTTLEnablePVList=[]
 shutterTTLDisablePVList=[]
@@ -48,9 +48,9 @@ for i in xrange(len(shutterList)):
     shutterSoftPVList.append(shutterList[i].soft)
     shutterFastPVList.append(shutterList[i].fast)
 # Shutter RBVs
-shutter1RBVPv=PV('ADC:AS01:12:V')
-shutter2RBVPv=PV('ADC:AS01:13:V')
-shutter3RBVPv=PV('ADC:AS01:14:V')
+shutter1RBVPv=PV('ESB:GP01:VAL01')
+shutter2RBVPv=PV('ESB:GP01:VAL02')
+shutter3RBVPv=PV('ESB:GP01:VAL03')
 shutterRBVPVList=[shutter1RBVPv,shutter2RBVPv,shutter3RBVPv]
 #
 # ADC values
@@ -62,7 +62,7 @@ shutterRBVPVList=[shutter1RBVPv,shutter2RBVPv,shutter3RBVPv]
 pause1=1.0  # sec
 
 #---- For data logging --------------------------
-pvList=[shutter1RBVPv,shutter2RBVPv,shutter3RBVPv,motor1.rbv] # list of PVs to be monitored during scan
+pvList=[shutter1RBVPv,shutter2RBVPv,shutter3RBVPv,scanPv1] # list of PVs to be monitored during scan
 expName=PV(pvPrefix + ':IOC.DESC').get()
 if ' ' in expName: expName=expName.replace(' ','_')
 now=datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -86,48 +86,41 @@ grabImagesFlag=PV(pvPrefix + ':GRABIMAGES:ENABLE').get()
 grabImagesN=PV(pvPrefix + ':GRABIMAGES:N').get()
 grabImagesFilepath=filepath + 'images/'
 grabImagesPlugin='TIFF1'
-grabImagesSource='ANDOR1'
+grabImagesSource='13PS10'
 #-------------------------------------------------------------
 
 ####################################################################################################
 
-def singlePvScan(motor,grabImagesFlag=0,grabImagesN=0,grabImagesSource='',grabImagesFilepath='~/pvScan/images/',grabImagesPlugin='TIFF1',grabImagesFilenameExtras='',settleTime=0.5):
+def singlePvScan(scanPv,grabImagesFlag=0,grabImagesN=0,grabImagesSource='',grabImagesFilepath='~/pvScan/images/',grabImagesPlugin='TIFF1',grabImagesFilenameExtras=''):
     "Scans pv from start to stop in n steps, optionally grabbing images at each step."
-    initialPos=motor.get()
-    print pvScan.timestamp(1), 'Starting scan'
-    pvScan.msgPv.put('Starting scan')
-    inc=(motor.stop-motor.start)/(motor.nsteps-1)
-    for i in range(motor.nsteps):
-        newPos=motor.start + i*inc
-        print pvScan.timestamp(1), 'Moving %s to %f' % (motor.pvname,newPos)
-        pvScan.msgPv.put('Moving')
-        motor.put(newPos)
-        pvScan.printSleep(settleTime,'Settling')
+    initialPos=scanPv.get()
+    pvScan.printMsg('Starting scan')
+    inc=(scanPv.stop-scanPv.start)/(scanPv.nsteps-1)
+    for i in range(scanPv.nsteps):
+        newPos=scanPv.start + i*inc
+        pvScan.printMsg('Setting %s to %f' % (scanPv.pvname,newPos))
+        scanPv.put(newPos)
+        pvScan.printSleep(scanPv.settletime,'Settling')
         if grabImagesFlag:
-            grabImagesFilenameExtras='_Sol2-' + '{0:08.4f}'.format(motor.get())
+            grabImagesFilenameExtras='_Sol2-' + '{0:08.4f}'.format(scanPv.get())
             pvScan.grabImages(grabImagesN,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras)
     # Move back to initial positions
-    print pvScan.timestamp(1), 'Moving %s back to initial position: %f' %(motor.pvname,initialPos)
-    pvScan.msgPv.put('Moving motor back to initial position')
-    motor.put(initialPos)
+    pvScan.printMsg('Setting %s back to initial position: %f' %(scanPv.pvname,initialPos))
+    scanPv.put(initialPos)
 
 def scanRoutine():
     "This is the scan routine"
-    print pvScan.timestamp(1), 'Starting'
-    pvScan.msgPv.put('Starting')
+    pvScan.printMsg('Starting')
     sleep(pause1)
     # Open shutters
-    #print pvScan.timestamp(1), 'Opening shutters'
-    #pvScan.msgPv.put('Opening shutters')
+    #pvScan.printMsg('Opening shutters')
     #pvScan.shutterFunction(shutterOpenPVList,1)
     # Scan delay stage and grab images...
-    singlePvScan(motor1,grabImagesFlag,grabImagesN,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras='',settleTime=0.5)
+    singlePvScan(scanPv1,grabImagesFlag,grabImagesN,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras='')
     # Close shutters
-    #print pvScan.timestamp(1), 'Closing shutters'
-    #pvScan.msgPv.put('Closing shutters')
+    #pvScan.printMsg('Closing shutters')
     #pvScan.shutterFunction(shutterClosePVList,0)
-    print pvScan.timestamp(1), 'Done'
-    pvScan.msgPv.put('Done')
+    pvScan.printMsg('Done')
 
 if __name__ == "__main__":
     "Do scan routine; log PV data to file as a separate thread if enabled"

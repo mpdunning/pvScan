@@ -55,6 +55,7 @@ class Motor(PV):
             self.stop= PV(pvPrefix + ':MOTOR' + str(self.motorNumber) + ':STOP').get()
             self.nsteps= PV(pvPrefix + ':MOTOR' + str(self.motorNumber) + ':NSTEPS').get()
             self.offset= PV(pvPrefix + ':MOTOR' + str(self.motorNumber) + ':OFFSET').get()
+            self.settletime= PV(pvPrefix + ':MOTOR' + str(self.motorNumber) + ':SETTLETIME').get()
 
     def motorWait(self,val,delta=0.005,timeout=180.0):
         "Waits until motor has stopped to proceed."
@@ -116,6 +117,18 @@ class DummyShutter(Shutter):
         self.close=PV(pvname)
         self.soft=PV(pvname)
         self.fast=PV(pvname)
+
+class ScanPv(PV):
+    "ScanPv class which inherits from pyEpics PV class."
+    def __init__(self,pvname,pvNumber=0):
+        PV.__init__(self,pvname)
+        self.pvNumber=pvNumber
+        if pvNumber:
+            self.start= PV(pvPrefix + ':SCANPV' + str(self.pvNumber) + ':START').get()
+            self.stop= PV(pvPrefix + ':SCANPV' + str(self.pvNumber) + ':STOP').get()
+            self.nsteps= PV(pvPrefix + ':SCANPV' + str(self.pvNumber) + ':NSTEPS').get()
+            self.offset= PV(pvPrefix + ':SCANPV' + str(self.pvNumber) + ':OFFSET').get()
+            self.settletime= PV(pvPrefix + ':SCANPV' + str(self.pvNumber) + ':SETTLETIME').get()
 
 def grabImages(grabImagesN,cameraPvPrefix,grabImagesFilepath,grabImagesPlugin='TIFF1',grabImagesFilenameExtras='',grabImagesWriteSettingsFlag=1,grabImagesSettingsPvList=[],pause=0.5):
     "Grabs n images from camera"
@@ -202,17 +215,20 @@ def shutterCheck(shutterPVList,val=1.0):
             msgPv.put('Failed: Shutter not closed')
             raise Exception('Shutter not closed')
 
-def printSleep(sleepTime,printString='Pausing'):
+def printMsg(string,pv=msgPv):
+    "Prints message to stdout and to message PV."
+    try:
+        print '%s %s' % (timestamp(1),string)
+        pv.put(string)
+    except ValueError:
+        print 'msgPv.put failed: string too long'
+
+def printSleep(sleepTime,string='Pausing',pv=msgPv):
     "Prints message and pauses for sleepTime seconds."
     if sleepTime:
-        print timestamp(1), '%s for %f seconds...' % (printString,sleepTime)
-        msgPv.put(printString + ' for ' + str(sleepTime) + ' seconds...')
+        message='%s for %f seconds...' % (string,sleepTime)
+        printMsg(message)
         sleep(sleepTime)
-
-def print2(string,pv=msgPv):
-    "Prints message to stdout and to message PV."
-    print '%s %s' % (timestamp(1),string)
-    pv.put(string)
 
 def datalog(interval,filename,pvlist,nptsmax):
     "Logs PV data to a file; designed to be run in a separate thread. Uses dataFlag global variable which is shared between threads. PVs must be in pvlist."

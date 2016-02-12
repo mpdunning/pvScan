@@ -32,6 +32,7 @@ motor2=pvScan.Motor('ESB:XPS1:m6:MOTR',2)  # Motor 2 class instance (UED Y motor
 motor3=pvScan.Motor('ESB:XPS1:m7:MOTR',3)  # Motor 3 class instance (UED Z motor)
 motor4=pvScan.Motor('ESB:XPS1:m4:MOTR',4)  # Motor 4 class instance (UED X motor)
 motor5=pvScan.Motor('ESB:XPS2:m1:MOTR',5)  # Motor 5 class instance (UED Delay motor)
+scanFlag=PV(pvPrefix + ':SCAN:ENABLE').get()
 #
 # Shutters.  Make a list for each group, to use shutterFunction()
 shutter1=pvScan.DummyShutter('ESB:GP01:VAL01') # Shutter 1 class instance (UED Drive laser)
@@ -167,7 +168,7 @@ def motorScan(motor1,motor2,motor3,radius=0,resetFlag=0,resetMotorPv='',grabImag
     pvScan.msgPv.put('Moving motor 3 back to initial position')
     motor3.move(initialPos3)
 
-def scanRoutine():
+def scanRoutine(scanFlag=1):
     "This is the scan routine"
     print pvScan.timestamp(1), 'Starting'
     pvScan.msgPv.put('Starting')
@@ -179,7 +180,8 @@ def scanRoutine():
     sleep(0.5)
     pvScan.shutterCheck(shutterRBVPVList)
     # Do motor scan 
-    motorScan(motor1,motor2,motor3,radius,resetFlag,resetMotorPv,grabImagesFlag,nResets,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras='',settleTime=0.5)
+    if scanFlag:
+        motorScan(motor1,motor2,motor3,radius,resetFlag,resetMotorPv,grabImagesFlag,nResets,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras='',settleTime=0.5)
     print pvScan.timestamp(1), 'Closing shutters'
     pvScan.msgPv.put('Closing shutters')
     # Close shutters and set back to Soft Mode
@@ -199,7 +201,7 @@ if __name__ == "__main__":
         datalogthread=Thread(target=pvScan.datalog,args=(dataInt,dataFilename,pvList,nPtsMax))
         datalogthread.start()
     try:
-        scanRoutine()
+        scanRoutine(scanFlag)
         sleep(pause1) # Log data for a little longer
     finally:
         pvScan.dataFlag=0  # Stop logging data
