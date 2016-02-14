@@ -27,7 +27,8 @@ sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/R2.0/modules/')
 import pvScan
 
 # Scan PVs
-scanPv1=pvScan.ScanPv('MCOR:AS01:113:ISETPT',1)  # ScanPv class instance (UED Solenoid)
+scanPv1=pvScan.ScanPv('SOLN:AS01:311:BCTRL',1)  # ScanPv class instance (UED Solenoid)
+#scanPv1=pvScan.ScanPv('MOTR:AS01:MC02:CH7:MOTOR',1)  # ScanPv class instance (x-stage)
 #
 # Shutters.  Make a list for each group, to use shutterFunction()
 shutter1=pvScan.LSCShutter('ASTA:LSC01') # Shutter 1 class instance (UED Drive laser)
@@ -87,11 +88,14 @@ grabImagesN=PV(pvPrefix + ':GRABIMAGES:N').get()
 grabImagesFilepath=filepath + 'images/'
 grabImagesPlugin='TIFF1'
 grabImagesSource='ANDOR1'
+# Leave grabImagesSettingsPvList=[] to use the default; otherwise add PVs with single quotes.
+#grabImagesSettingsPvList=[]
+grabImagesSettingsPvList=['ANDOR1:cam1:PortName_RBV','ANDOR1:cam1:ArraySizeX_RBV','ANDOR1:cam1:ArraySizeY_RBV','ANDOR1:cam1:AndorADCSpeed_RBV','ANDOR1:cam1:AcquireTime_RBV','ANDOR1:cam1:AndorEMGain_RBV','ANDOR1:cam1:AndorEMGainMode_RBV','ANDOR1:cam1:TriggerMode_RBV','ANDOR1:cam1:ShutterStatus_RBV','ANDOR1:cam1:TemperatureActual']
 #-------------------------------------------------------------
 
 ####################################################################################################
 
-def singlePvScan(scanPv,grabImagesFlag=0,grabImagesN=0,grabImagesSource='',grabImagesFilepath='~/pvScan/images/',grabImagesPlugin='TIFF1',grabImagesFilenameExtras=''):
+def singlePvScan(scanPv,grabImagesFlag=0,grabImagesN=0,grabImagesSource='',grabImagesFilepath='~/pvScan/images/',grabImagesPlugin='TIFF1',grabImagesFilenameExtras='',grabImagesWriteSettingsFlag=1,grabImagesSettingsPvList=[]):
     "Scans pv from start to stop in n steps, optionally grabbing images at each step."
     initialPos=scanPv.get()
     pvScan.printMsg('Starting scan')
@@ -103,7 +107,7 @@ def singlePvScan(scanPv,grabImagesFlag=0,grabImagesN=0,grabImagesSource='',grabI
         pvScan.printSleep(scanPv.settletime,'Settling')
         if grabImagesFlag:
             grabImagesFilenameExtras='_Sol2-' + '{0:08.4f}'.format(scanPv.get())
-            pvScan.grabImages(grabImagesN,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras)
+            pvScan.grabImages(grabImagesN,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras,grabImagesWriteSettingsFlag,grabImagesSettingsPvList)
     # Move back to initial positions
     pvScan.printMsg('Setting %s back to initial position: %f' %(scanPv.pvname,initialPos))
     scanPv.put(initialPos)
@@ -113,13 +117,13 @@ def scanRoutine():
     pvScan.printMsg('Starting')
     sleep(pause1)
     # Open shutters
-    pvScan.printMsg('Opening shutters')
-    pvScan.shutterFunction(shutterOpenPVList,1)
+    #pvScan.printMsg('Opening shutters')
+    #pvScan.shutterFunction(shutterOpenPVList,1)
     # Scan delay stage and grab images...
-    singlePvScan(scanPv1,grabImagesFlag,grabImagesN,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras='')
+    singlePvScan(scanPv1,grabImagesFlag,grabImagesN,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras='',grabImagesWriteSettingsFlag=1,grabImagesSettingsPvList=grabImagesSettingsPvList)
     # Close shutters
-    pvScan.printMsg('Closing shutters')
-    pvScan.shutterFunction(shutterClosePVList,0)
+    #pvScan.printMsg('Closing shutters')
+    #pvScan.shutterFunction(shutterClosePVList,0)
     pvScan.printMsg('Done')
 
 if __name__ == "__main__":

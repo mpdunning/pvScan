@@ -92,6 +92,8 @@ grabImagesN=PV(pvPrefix + ':GRABIMAGES:N').get()
 grabImagesFilepath=filepath + 'images/'
 grabImagesPlugin='TIFF1'
 grabImagesSource='ANDOR1'
+# Leave grabImagesSettingsPvList=[] to use the default; otherwise add PVs with single quotes.
+#grabImagesSettingsPvList=[]
 grabImagesSettingsPvList=['ANDOR1:cam1:PortName_RBV','ANDOR1:cam1:ArraySizeX_RBV','ANDOR1:cam1:ArraySizeY_RBV','ANDOR1:cam1:AndorADCSpeed_RBV','ANDOR1:cam1:AcquireTime_RBV','ANDOR1:cam1:AndorEMGain_RBV','ANDOR1:cam1:AndorEMGainMode_RBV','ANDOR1:cam1:TriggerMode_RBV','ANDOR1:cam1:ShutterStatus_RBV','ANDOR1:cam1:TemperatureActual']
 #-------------------------------------------------------------
 
@@ -104,7 +106,7 @@ nResets=PV(pvPrefix + ':NRESETS').get()
 
 ####################################################################################################
 
-def uedDAEReset(resetMotorPv='',grabImagesFlag=0,grabImagesN=0,grabImagesSource='',grabImagesFilepath='~/pvScan/images/',grabImagesPlugin='TIFF1',grabImagesFilenameExtras='',pause=1.0):
+def uedDAEReset(resetMotorPv='',grabImagesFlag=0,grabImagesN=0,grabImagesSource='',grabImagesFilepath='~/pvScan/images/',grabImagesPlugin='TIFF1',grabImagesFilenameExtras='',grabImagesWriteSettingsFlag=1,grabImagesSettingsPvList=[],pause=1.0):
     "Does UED DAE reset routine."
     print pvScan.timestamp(1), 'Starting reset loop'
     pvScan.msgPv.put('Starting reset loop')

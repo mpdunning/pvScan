@@ -182,7 +182,24 @@ def grabImages(grabImagesN,cameraPvPrefix,grabImagesFilepath,grabImagesPlugin='T
             datafile.write('\n')
     printSleep(pause)
 
-def motor1DScan(motor,grabImagesFlag=0,grabImagesN=0,grabImagesSource='',grabImagesFilepath='~/pvScan/images/',grabImagesPlugin='TIFF1',grabImagesFilenameExtras='',settleTime=0.5):
+def singlePvScan(scanPv,grabImagesFlag=0,grabImagesN=0,grabImagesSource='',grabImagesFilepath='~/pvScan/images/',grabImagesPlugin='TIFF1',grabImagesFilenameExtras='',grabImagesWriteSettingsFlag=1,grabImagesSettingsPvList=[]):
+    "Scans pv from start to stop in n steps, optionally grabbing images at each step."
+    initialPos=scanPv.get()
+    pvScan.printMsg('Starting scan')
+    inc=(scanPv.stop-scanPv.start)/(scanPv.nsteps-1)
+    for i in range(scanPv.nsteps):
+        newPos=scanPv.start + i*inc
+        pvScan.printMsg('Setting %s to %f' % (scanPv.pvname,newPos))
+        scanPv.put(newPos)
+        pvScan.printSleep(scanPv.settletime,'Settling')
+        if grabImagesFlag:
+            grabImagesFilenameExtras='_ScanPV-' + '{0:08.4f}'.format(scanPv.get())
+            pvScan.grabImages(grabImagesN,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras,grabImagesWriteSettingsFlag,grabImagesSettingsPvList)
+    # Move back to initial positions
+    pvScan.printMsg('Setting %s back to initial position: %f' %(scanPv.pvname,initialPos))
+    scanPv.put(initialPos)
+
+def motor1DScan(motor,grabImagesFlag=0,grabImagesN=0,grabImagesSource='',grabImagesFilepath='~/pvScan/images/',grabImagesPlugin='TIFF1',grabImagesFilenameExtras='',grabImagesWriteSettingsFlag=1,grabImagesSettingsPvList=[],settleTime=0.5):
     "Scans motor from start to stop in n steps, optionally grabbing images at each step."
     initialPos=motor.get()
     print timestamp(1), 'Starting motor scan'
@@ -193,10 +210,10 @@ def motor1DScan(motor,grabImagesFlag=0,grabImagesN=0,grabImagesSource='',grabIma
         print timestamp(1), 'Moving %s to %f' % (motor.pvname,newPos)
         msgPv.put('Moving motor')
         motor.move(newPos)
-        printSleep(settleTime,'Settling')
+        printSleep(motor.settletime,'Settling')
         if grabImagesFlag:
             grabImagesFilenameExtras='_MotorPos-' + '{0:08.4f}'.format(motor.get())
-            grabImages(grabImagesN,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras)
+            grabImages(grabImagesN,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras,grabImagesWriteSettingsFlag,grabImagesSettingsPvList)
     # Move motor back to initial positions
     print timestamp(1), 'Moving %s back to initial position: %f' %(motor.pvname,initialPos)
     msgPv.put('Moving motor back to initial position')

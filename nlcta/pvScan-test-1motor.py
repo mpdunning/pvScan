@@ -87,6 +87,9 @@ grabImagesN=PV(pvPrefix + ':GRABIMAGES:N').get()
 grabImagesFilepath=filepath + 'images/'
 grabImagesPlugin='TIFF1'
 grabImagesSource='13PS10'
+# Leave grabImagesSettingsPvList=[] to use the default; otherwise add PVs with single quotes.
+#grabImagesSettingsPvList=['13PS10:cam1:Model_RBV']
+grabImagesSettingsPvList=[]
 #-------------------------------------------------------------
 
 ####################################################################################################
@@ -104,7 +107,7 @@ def scanRoutine():
     #print pvScan.timestamp(1), 'Removing screen'
     #screenPv.put(0)
     # Scan delay stage and grab images...
-    pvScan.motor1DScan(motor1,grabImagesFlag,grabImagesN,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras='',settleTime=0.5)
+    pvScan.motor1DScan(motor1,grabImagesFlag,grabImagesN,grabImagesSource,grabImagesFilepath,grabImagesPlugin,grabImagesFilenameExtras='',grabImagesWriteSettingsFlag=1,grabImagesSettingsPvList=grabImagesSettingsPvList,settleTime=0.5)
     # Close shutters
     print pvScan.timestamp(1), 'Closing shutters'
     pvScan.msgPv.put('Closing shutters')
