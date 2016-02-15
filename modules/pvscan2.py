@@ -209,6 +209,11 @@ class DataLogger(Experiment):
     "Sets up pvlist and filepaths to write data and log files"
     def __init__(self,pvlist):
         Experiment.__init__(self)
+        if pvlist:
+            for pv in pvlist:
+                if not pv.status:
+                    pvlist.remove(pv)
+                    printMsg('PV %s invalid: removed' % (pv.pvname))
         self.pvlist=pvlist
         PV(pvPrefix + ':DATA:FILEPATH').put(self.filepath)  # Write filepath to PV for display
         self.dataFilename=self.filepath + now + '.dat'
