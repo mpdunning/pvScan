@@ -5,6 +5,7 @@
 *.swo
 testEpicsMotorClass.py
 testMyMotorClass.py
+testScanPvClass.py
 
 <<<<<<< HEAD
 *.swp

@@ -2,20 +2,11 @@
 # For doing DAQ scans.  Logs PV data to a file while doing scan of an arbitrary PV. Uses a supporting IOC (pvScan).
 # mdunning 1/7/16
 
-from epics import caget,caput,PV
+from epics import PV
 from time import sleep
 import datetime,os,sys
 from threading import Thread
 
-args='PV_PREFIX'
-
-def show_usage():
-    "Prints usage"
-    print 'Usage: %s %s' %(sys.argv[0], args)
-
-if len(sys.argv) != 2:
-    show_usage()
-    sys.exit(1)
 
 # PV prefix for pvScan IOC; should be passed as an argument to this script.
 pvPrefix=sys.argv[1]
@@ -42,7 +33,7 @@ scanPv1=pvScan2.ScanPv('',1) # (UED Solenoid)
 #--- Shutters -----------------------------------------
 # Create Shutter objects. 
 # First argument is shutter PV.
-# Second arg is RBV PV, for example an ADC channel.
+# Second arg (optional) is an RBV PV, for example an ADC channel.
 shutter1=pvScan2.DummyShutter('ESB:GP01:VAL01','ESB:GP01:VAL01') # (UED Drive laser)
 shutter2=pvScan2.DummyShutter('ESB:GP01:VAL02','ESB:GP01:VAL02') # (UED pump laser)
 shutter3=pvScan2.DummyShutter('ESB:GP01:VAL03','ESB:GP01:VAL03') # (UED HeNe laser)
@@ -98,12 +89,23 @@ def scanRoutine():
 
 if __name__ == "__main__":
     "Do scan routine; log PV data to file as a separate thread if enabled"
-    pvScan2.Tee(dataLog1.logFilename, 'w')
-    pvScan2.dataFlag=1  # Start logging data when thread starts
-    if dataLog1.dataEnable==1:
-        datalogthread=Thread(target=pvScan2.DataLogger.datalog,args=(dataLog1,))
-        datalogthread.start()
     try:
+        args='PV_PREFIX'
+        def show_usage():
+            "Prints usage"
+            print 'Usage: %s %s' %(sys.argv[0], args)
+
+        if len(sys.argv) != 2:
+            show_usage()
+            sys.exit(1)
+
+        pid=os.getpid()
+        pvScan2.pidPV.put(pid)
+        pvScan2.Tee(dataLog1.logFilename, 'w')
+        pvScan2.dataFlag=1  # Start logging data when thread starts
+        if dataLog1.dataEnable==1:
+            datalogthread=Thread(target=pvScan2.DataLogger.datalog,args=(dataLog1,))
+            datalogthread.start()
         scanRoutine()
         sleep(2) # Log data for a little longer
     finally:

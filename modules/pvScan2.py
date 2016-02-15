@@ -1,24 +1,23 @@
+#!/usr/bin/env python
 # pvScan module
 
-from epics import caget,caput,PV
+from epics import PV,ca
 from time import sleep
 import datetime,math,os,sys
-import subprocess
 
 try:
     # PV prefix of pvScan IOC
     pvPrefix=os.environ['PVSCAN_PVPREFIX']
     # PV for status message
     msgPv=PV(pvPrefix + ':MSG')
-    # Get PID for abort button
-    pid=os.getpid()
+    msgPv.put('Initializing...')
+    # PV for PID (for abort button)
     pidPV=PV(pvPrefix + ':PID')
-    pidPV.put(pid)
 except KeyError:
-    print 'Warning: PVSCAN_PVPREFIX not defined. Continuing...'
+    print 'PVSCAN_PVPREFIX not defined. Continuing...'
     pvPrefix=''
-    msgPv=PV(pvPrefix + ':MSG')
-    pidPV=PV(pvPrefix + ':PID')
+    msgPv=''
+    pidPV=''
 
 
 ##################################################################################################################
@@ -75,6 +74,9 @@ class ScanPv(PV):
         if rbv: self.rbv=PV(rbv)
         if not pvname: pvname=PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':PVNAME').get()
         PV.__init__(self,pvname)
+        if not self.status:
+            printMsg('PV %s not valid' % (self.pvname))
+            raise Exception('PV %s not valid' % (self.pvname))
         if pvnumber:
             self.desc= PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':DESC').get()
             if ' ' in self.desc: self.desc=self.desc.replace(' ','_')
@@ -158,8 +160,7 @@ class Shutter(PV):
     "Shutter class which inherits from pyEpics PV class."
     def __init__(self,pvname,rbvpv=''):
         PV.__init__(self,pvname)
-        if rbvpv: rbv=PV(rbvpv)
-        self.rbv=rbv
+        self.rbv=PV(rbvpv) if rbvpv else ''
 
 class LSCShutter(Shutter):
     "Lambda SC shutter class which inherits from Shutter class."
@@ -188,16 +189,16 @@ class ShutterGroup:
     "Sets up a group of shutters for common functions"
     def __init__(self,shutterList):
         self.shutterList=shutterList
-        self.ttlEnable=[]
-        self.ttlDisable=[]
+        self.ttlInEnable=[]
+        self.ttlInDisable=[]
         self.open=[]
         self.close=[]
         self.soft=[]
         self.fast=[]
         self.rbv=[]
         for i in xrange(len(self.shutterList)):
-            self.ttlEnable.append(self.shutterList[i].ttlInEnable)
-            self.ttlDisable.append(self.shutterList[i].ttlInDisable)
+            self.ttlInEnable.append(self.shutterList[i].ttlInEnable)
+            self.ttlInDisable.append(self.shutterList[i].ttlInDisable)
             self.open.append(self.shutterList[i].open)
             self.close.append(self.shutterList[i].close)
             self.soft.append(self.shutterList[i].soft)
@@ -232,7 +233,18 @@ class DataLogger(Experiment):
                 datafile.write(str(timestamp(1)))
                 datafile.write(' ')
                 for pv in self.pvlist:
-                    datafile.write(str(pv.value))
+                    try:
+                        #datafile.write(str(pv.value))
+                        #datafile.write(str(pv.get(timeout=0.8*self.dataInt,use_monitor=False)))
+                        # Must use epics.ca here since PV() timeout doesn't seem to work.
+                        chid  = ca.create_channel(pv.pvname)
+                        pvValue = ca.get(chid,timeout=0.9*self.dataInt/len(self.pvlist))
+                        pvValue = ca.get(chid)
+                        datafile.write(str(pvValue))
+                    except KeyError:
+                        datafile.write('Invalid')
+                    except TypeError:
+                        datafile.write('Invalid')
                     datafile.write(' ')
                 datafile.write('\n')
                 sleep(self.dataInt)
@@ -242,26 +254,30 @@ class ImageGrabber(Experiment):
     "Sets things up to grab images"
     def __init__(self,cameraPvPrefix,pvlist=[],plugin='TIFF1'):
         Experiment.__init__(self)
-        filepath=self.filepath + 'images/'
-        self.cameraPvPrefix=cameraPvPrefix
-        if pvlist==[]:
-            pvlist=['cam1:BI:NAME.DESC','cam1:AcquireTime','cam1:Gain','cam1:TriggerMode_RBV','cam1:ArraySizeX_RBV','cam1:SizeY_RBV','cam1:ShutterStatus_RBV','cam1:TemperatureActual']
+        if not pvlist:
+            if 'ANDOR' in cameraPvPrefix:
+                pvlist=['cam1:BI:NAME.DESC','cam1:AcquireTime_RBV','cam1:AndorEMGain_RBV','cam1:AndorEMGainMode_RBV','cam1:TriggerMode_RBV','cam1:ImageMode_RBV','cam1:ArrayRate_RBV','cam1:DataType_RBV','cam1:ArraySizeX_RBV','cam1:ArraySizeY_RBV','cam1:AndorADCSpeed_RBV','cam1:AndorPreAmpGain_RBV','cam1:ShutterStatus_RBV','cam1:AndorCooler','cam1:Temperature']
+            else:
+                pvlist=['cam1:BI:NAME.DESC','cam1:AcquireTime_RBV','cam1:Gain_RBV','cam1:TriggerMode_RBV','cam1:ArrayRate_RBV','cam1:DataType_RBV','cam1:ColorMode_RBV','cam1:ArraySizeX_RBV','cam1:ArraySizeY_RBV']
             for i in xrange(len(pvlist)):
-                pvlist[i]= self.cameraPvPrefix + ':' + pvlist[i]
-        self.pvlist=pvlist
+                pvlist[i]= cameraPvPrefix + ':' + pvlist[i]
+        filepath=self.filepath + 'images/' # This is inherited from Experiment class
         grabFlag=PV(pvPrefix + ':GRABIMAGES:ENABLE').get()
         if grabFlag and not os.path.exists(filepath): os.makedirs(filepath)
+        if plugin=='TIFF1':
+            fileExt='.tif'
+        elif plugin=='JPEG1':
+            fileExt='.jpg'
+        else:
+            fileExt='.img'
+        self.cameraPvPrefix=cameraPvPrefix
+        self.pvlist=pvlist
+        self.plugin=plugin
         self.grabFlag=grabFlag
         self.filepath=filepath
         self.nImages=PV(pvPrefix + ':GRABIMAGES:N').get()
-        self.plugin=plugin
-        if self.plugin=='TIFF1':
-            self.fileExt='.tif'
-        elif self.plugin=='JPEG1':
-            self.fileExt='.jpg'
-        else:
-            self.fileExt='.img'
-        self.imagePvPrefix=self.cameraPvPrefix + ':' + self.plugin
+        self.fileExt=fileExt
+        self.imagePvPrefix=self.cameraPvPrefix + ':' + plugin
         self.filenameExtras=''
         
 
@@ -279,7 +295,7 @@ class ImageGrabber(Experiment):
         PV(self.imagePvPrefix+':FileNumber').put(1)
         if not PV(self.cameraPvPrefix+':cam1:Acquire.RVAL').get(): # If camera is not acquiring...
             PV(self.cameraPvPrefix+':cam1:Acquire').put(1) # Try to turn acquisition on
-            sleep(0.5)
+            sleep(0.5) # Give camera time to turn on...
             if not PV(self.cameraPvPrefix+':cam1:Acquire.RVAL').get():
                 # If unable to acquire, raise exception & quit
                 printMsg('Failed: Camera not acquiring')
@@ -330,7 +346,20 @@ def printSleep(sleepTime,string='Pausing',pv=msgPv):
         printMsg(message)
         sleep(sleepTime)
 
-                
+
+#--- Self-test code -------------
+if __name__ == "__main__":
+    args='PV_PREFIX'
+    def show_usage():
+        "Prints usage"
+        print 'Usage: %s %s' %(sys.argv[0], args)
+    if len(sys.argv) != 2:
+        show_usage()
+        sys.exit(1)
+    pvPrefix=sys.argv[1]
+    iocPv=PV(pvPrefix + ':IOC')
+    print 'IOC name PV: ',iocPv
+    print 'IOC name: ',iocPv.get()        
     
 
 ##################################################################################################################
