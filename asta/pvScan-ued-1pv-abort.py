@@ -12,39 +12,39 @@ pvPrefix=sys.argv[1]
 os.environ['PVSCAN_PVPREFIX']=pvPrefix
 
 # Import pvScan module
-sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/R2.0/modules/')
-import pvScan2
+sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/prod/modules/')
+import pvscan
 
 # Get PID PV
-pid=pvScan2.pidPV.get()
+pid=pvscan.pidPV.get()
 
 #--- Shutters -----------------------------------------
 # Create Shutter objects. 
 # First argument is shutter PV.
 # Second arg (optional) is an RBV PV, for example an ADC channel.
-shutter1=pvScan2.DummyShutter('ESB:GP01:VAL01') # (UED Drive laser)
-shutter2=pvScan2.DummyShutter('ESB:GP01:VAL02') # (UED pump laser)
-shutter3=pvScan2.DummyShutter('ESB:GP01:VAL03') # (UED HeNe laser)
+shutter1=pvscan.LSCShutter('ASTA:LSC01') # (UED Drive laser)
+shutter2=pvscan.LSCShutter('ASTA:LSC02') # (UED pump laser)
+shutter3=pvscan.LSCShutter('ASTA:LSC03') # (UED HeNe laser)
 #
 # Create ShutterGroup object to use common functions on all shutters.
 # Argument is a list of shutter objects.
-shutterGroup1=pvScan2.ShutterGroup([shutter1,shutter2,shutter3])
+shutterGroup1=pvscan.ShutterGroup([shutter1,shutter2,shutter3])
 
 ##################################################################################################################            
 def abortRoutine():
     "This is the abort routine"
-    pvScan2.printMsg('Aborting')
+    pvscan.printMsg('Aborting')
     # Kill scan routine process
-    pvScan2.printMsg('Killing process %d...' % (pid))
+    pvscan.printMsg('Killing process %d...' % (pid))
     os.kill(pid, signal.SIGKILL)
     # Disable shutters
-    #pvScan2.printMsg('Disabling shutters')
-    #pvScan2.shutterFunction(shutterGroup1.ttlInDisable,0)
+    #pvscan.printMsg('Disabling shutters')
+    #pvscan.shutterFunction(shutterGroup1.ttlInDisable,0)
     #sleep(0.5)
     # Close shutters
-    pvScan2.printMsg('Closing shutters')
-    pvScan2.shutterFunction(shutterGroup1.close,0)
-    pvScan2.printMsg('Aborted')
+    pvscan.printMsg('Closing shutters')
+    pvscan.shutterFunction(shutterGroup1.close,0)
+    pvscan.printMsg('Aborted')
 
 
 if __name__ == "__main__":

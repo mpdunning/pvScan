@@ -11,6 +11,7 @@ try:
     # PV for status message
     msgPv=PV(pvPrefix + ':MSG')
     msgPv.put('Initializing...')
+    print 'Initializing...'
     # PV for PID (for abort button)
     pidPV=PV(pvPrefix + ':PID')
 except KeyError:
@@ -53,6 +54,7 @@ class Experiment:
                 filepath='~/pvScan/' + self.expname + '/' +  now + '/'
         if not os.path.exists(filepath): os.makedirs(filepath)
         self.filepath=filepath
+        self.scanflag=PV(pvPrefix + ':SCAN:ENABLE').get()
 
 class Tee(object):
     "Writes output to stdout and to log file"
@@ -75,6 +77,8 @@ class ScanPv(PV):
         if not pvname: pvname=PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':PVNAME').get()
         PV.__init__(self,pvname)
         if not self.status:
+            print 'PV object: ', self
+            print 'PV status: ', self.status
             printMsg('PV %s not valid' % (self.pvname))
             raise Exception('PV %s not valid' % (self.pvname))
         if pvnumber:
@@ -127,6 +131,7 @@ class Motor(ScanPv):
         ScanPv.__init__(self,pvname,pvnumber)
         self.rbv=PV(pvname + '.RBV')
         self.velo=PV(pvname + '.VELO')
+        self.abort=PV(pvname + '.STOP')
 
     def motorWait(self,val,delta=0.005,timeout=180.0):
         ScanPv.pvWait(self,val,delta=0.005,timeout=180.0)
@@ -138,7 +143,7 @@ class Motor(ScanPv):
             Motor.motorWait(self,value,timeout=timeout)
 
     def motor1DScan(self,grabObject=''):
-        ScanPv.pv1DScan(self,grabObject='')
+        ScanPv.pv1DScan(self,grabObject)
 
 class PolluxMotor(Motor):
     "Motor class which inherits from pvScan Motor class."
@@ -147,6 +152,7 @@ class PolluxMotor(Motor):
         self.rbv=PV(':'.join(pvname.split(':')[0:2]) + ':AI:ACTPOS')
         self.velo=PV(':'.join(pvname.split(':')[0:2]) + ':AO:VELO')
         self.go=PV(':'.join(pvname.split(':')[0:2]) + ':BO:GOABS')
+        self.abort=PV(':'.join(pvname.split(':')[0:2]) + ':BO:ABORT')
     
     def move(self,value,wait=True,timeout=180.0):
         "Put value and press Go button"
@@ -209,6 +215,11 @@ class DataLogger(Experiment):
     "Sets up pvlist and filepaths to write data and log files"
     def __init__(self,pvlist):
         Experiment.__init__(self)
+        if pvlist:
+            for pv in pvlist:
+                if not pv.status:
+                    pvlist.remove(pv)
+                    printMsg('PV %s invalid: removed' % (pv.pvname))
         self.pvlist=pvlist
         PV(pvPrefix + ':DATA:FILEPATH').put(self.filepath)  # Write filepath to PV for display
         self.dataFilename=self.filepath + now + '.dat'
@@ -281,8 +292,9 @@ class ImageGrabber(Experiment):
         self.filenameExtras=''
         
 
-    def grabImages(self,grabImagesWriteSettingsFlag=1,pause=0.5):
+    def grabImages(self,nImages=0,grabImagesWriteSettingsFlag=1,pause=0.5):
         "Grabs n images from camera"
+        self.nImages=nImages if nImages else self.nImages
         printMsg('Grabbing %d images from %s...' % (self.nImages,self.cameraPvPrefix))
         PV(self.imagePvPrefix+':EnableCallbacks').put(1)
         # PV().put() seems to need a null terminator when putting strings to waveforms.

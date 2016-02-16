@@ -22,19 +22,15 @@ pid=pvscan.pidPV.get()
 # Create Motor objects, one for each PV you are scanning. 
 # First argument is the scan PV, leave blank to get from pvScan IOC. 
 # Second arg is an index which should be unique.
-motor1=pvScan.PolluxMotor('ASTA:POLX01:AO:ABSMOV',1)  # (UED pitch motor)
-motor2=pvScan.Motor('MOTR:AS01:MC02:CH8:MOTOR',2)  # (UED Y motor)
-motor3=pvScan.Motor('MOTR:AS01:MC02:CH2:MOTOR',3)  # (UED Z motor)
-motor4=pvScan.Motor('MOTR:AS01:MC02:CH7:MOTOR',4)  # (UED X motor)
-motor5=pvScan.Motor('MOTR:AS01:MC01:CH8:MOTOR',5)  # (UED Delay motor)
+motor1=pvscan.Motor('ESB:XPS1:m4:MOTR',1) # (UED pitch motor)
 
 #--- Shutters -----------------------------------------
 # Create Shutter objects. 
 # First argument is shutter PV.
 # Second arg (optional) is an RBV PV, for example an ADC channel.
-shutter1=pvscan.LSCShutter('ASTA:LSC01') # (UED Drive laser)
-shutter2=pvscan.LSCShutter('ASTA:LSC02') # (UED pump laser)
-shutter3=pvscan.LSCShutter('ASTA:LSC03') # (UED HeNe laser)
+shutter1=pvscan.DummyShutter('ESB:GP01:VAL01') # (UED Drive laser)
+shutter2=pvscan.DummyShutter('ESB:GP01:VAL02') # (UED pump laser)
+shutter3=pvscan.DummyShutter('ESB:GP01:VAL03') # (UED HeNe laser)
 #
 # Create ShutterGroup object to use common functions on all shutters.
 # Argument is a list of shutter objects.
@@ -47,8 +43,6 @@ def abortRoutine():
     # Stop motors
     pvscan.printMsg('Stopping motors')
     motor1.abort.put(1)
-    motor2.abort.put(1)
-    motor3.abort.put(1)
     # Kill scan routine process
     pvscan.printMsg('Killing process %d...' % (pid))
     os.kill(pid, signal.SIGKILL)
@@ -56,10 +50,9 @@ def abortRoutine():
     #pvscan.printMsg('Disabling shutters')
     #pvscan.shutterFunction(shutterGroup1.ttlInDisable,0)
     #sleep(0.5)
-    # Close and disable shutters
+    # Close shutters
     pvscan.printMsg('Closing shutters')
-    pvscan.shutterFunction(shutterGroup1.ttlInDisable,1)
-    pvscan.shutterFunction(shutterGroup1.close,1)
+    pvscan.shutterFunction(shutterGroup1.close,0)
     pvscan.printMsg('Aborted')
 
 

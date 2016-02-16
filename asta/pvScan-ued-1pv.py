@@ -25,21 +25,18 @@ exp1=pvscan.Experiment()
 sleep(2)
 
 #--- Scan PVs ------------------------------------------
-# Create Motor objects, one for each PV you are scanning. 
+# Create ScanPv objects, one for each PV you are scanning. 
 # First argument is the scan PV, leave blank to get from pvScan IOC. 
 # Second arg is an index which should be unique.
-motor1=pvScan.PolluxMotor('ASTA:POLX01:AO:ABSMOV',1)  # (UED Pitch motor)
-#motor1=pvScan.Motor('MOTR:AS01:MC02:CH3:MOTOR',1)  # (UED YAW motor)
-motor2=pvScan.Motor('MOTR:AS01:MC02:CH3:MOTOR',2)  # (UED YAW motor)
-#motor1=pvScan.Motor('MOTR:AS01:MC02:CH3:MOTOR',1)  # (UED YAW motor)
+scanPv1=pvscan.ScanPv('',1)
 
 #--- Shutters -----------------------------------------
 # Create Shutter objects. 
 # First argument is shutter PV.
 # Second arg (optional) is an RBV PV, for example an ADC channel.
-shutter1=pvscan.LSCShutter('ASTA:LSC01','ADC:AS01:12:V') # (UED Drive laser)
-shutter2=pvscan.LSCShutter('ASTA:LSC02','ADC:AS01:13:V') # (UED pump laser)
-shutter3=pvscan.LSCShutter('ASTA:LSC03','ADC:AS01:14:V') # (UED HeNe laser)
+shutter1=pvscan.LSCShutter('ASTA:LSC01','ADC:AS01:13:V') # (UED Drive laser)
+shutter2=pvscan.LSCShutter('ASTA:LSC02','ADC:AS01:14:V') # (UED pump laser)
+shutter3=pvscan.LSCShutter('ASTA:LSC03','ADC:AS01:15:V') # (UED HeNe laser)
 #
 # Create ShutterGroup object to use common functions on all shutters.
 # Argument is a list of shutter objects.
@@ -54,8 +51,8 @@ shutterGroup1=pvscan.ShutterGroup([shutter1,shutter2,shutter3])
 
 #---- Data logging --------------------------
 # List of PV() objects to be monitored during scan.  
-# Example: dataLogPvList=shutterGroup1.rbv + [motor1,lsrpwrPv,PV('MY:PV1')] + [PV('MY:PV2')]
-dataLogPvList=shutterGroup1.rbv + [motor1]
+# Example: dataLogPvList=shutterGroup1.rbv + [scanPv1,lsrpwrPv,PV('MY:PV1')] + [PV('MY:PV2')]
+dataLogPvList=shutterGroup1.rbv + [scanPv1]
 #
 # Create DataLogger object.
 # Argument is the list of PVs to monitor.
@@ -83,8 +80,7 @@ def scanRoutine():
     #pvscan.printMsg('Opening shutters')
     #pvscan.shutterFunction(shutterGroup1.open,1)
     # Scan delay stage and grab images...
-    pvscan.Motor.motor1DScan(motor1,grab1)
-    #pvscan.Motor.pv1DScan(motor1,grab1)
+    pvscan.ScanPv.pv1DScan(scanPv1,grab1)
     # Close shutters
     #pvscan.printMsg('Closing shutters')
     #pvscan.shutterFunction(shutterGroup1.close,0)

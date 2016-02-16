@@ -28,19 +28,18 @@ sleep(2)
 # Create Motor objects, one for each PV you are scanning. 
 # First argument is the scan PV, leave blank to get from pvScan IOC. 
 # Second arg is an index which should be unique.
-motor1=pvScan.PolluxMotor('ASTA:POLX01:AO:ABSMOV',1)  # (UED pitch motor)
-motor2=pvScan.Motor('MOTR:AS01:MC02:CH8:MOTOR',2)  # (UED Y motor)
-motor3=pvScan.Motor('MOTR:AS01:MC02:CH2:MOTOR',3)  # (UED Z motor)
-motor4=pvScan.Motor('MOTR:AS01:MC02:CH7:MOTOR',4)  # (UED X motor)
-motor5=pvScan.Motor('MOTR:AS01:MC01:CH8:MOTOR',5)  # (UED Delay motor)
-#
+motor1=pvscan.Motor('ESB:XPS1:m3:MOTR',1)  # (UED pitch motor)
+motor2=pvscan.Motor('ESB:XPS1:m6:MOTR',2)  # (UED Y motor)
+motor3=pvscan.Motor('ESB:XPS1:m7:MOTR',3)  # (UED Z motor)
+motor4=pvscan.Motor('ESB:XPS1:m4:MOTR',4)  # (UED X motor)
+motor5=pvscan.Motor('ESB:XPS2:m1:MOTR',5)  # (UED Delay motor)
 #--- Shutters -----------------------------------------
 # Create Shutter objects. 
 # First argument is shutter PV.
 # Second arg (optional) is an RBV PV, for example an ADC channel.
-shutter1=pvscan.LSCShutter('ASTA:LSC01','ADC:AS01:12:V') # (UED Drive laser)
-shutter2=pvscan.LSCShutter('ASTA:LSC02','ADC:AS01:13:V') # (UED pump laser)
-shutter3=pvscan.LSCShutter('ASTA:LSC03','ADC:AS01:14:V') # (UED HeNe laser)
+shutter1=pvscan.DummyShutter('ESB:GP01:VAL01','ESB:GP01:VAL01') # (UED Drive laser)
+shutter2=pvscan.DummyShutter('ESB:GP01:VAL02','ESB:GP01:VAL02') # (UED pump laser)
+shutter3=pvscan.DummyShutter('ESB:GP01:VAL03','ESB:GP01:VAL03') # (UED HeNe laser)
 #
 # Create ShutterGroup object to use common functions on all shutters.
 # Argument is a list of shutter objects.
@@ -55,8 +54,8 @@ shutterGroup1=pvscan.ShutterGroup([shutter1,shutter2,shutter3])
 
 #---- Data logging --------------------------
 # List of PV() objects to be monitored during scan.  
-# Example: dataLogPvList=shutterGroup1.rbv + [motor1.rbv,lsrpwrPv,PV('MY:PV1')] + [PV('MY:PV2')]
-dataLogPvList=shutterGroup1.rbv + [motor1.rbv,motor2.rbv,motor3.rbv,motor4.rbv,motor5.rbv]
+# Example: dataLogPvList=shutterGroup1.rbv + [motor1,lsrpwrPv,PV('MY:PV1')] + [PV('MY:PV2')]
+dataLogPvList=shutterGroup1.rbv + [motor1,motor2,motor3,motor4,motor5]
 #
 # Create DataLogger object.
 # Argument is the list of PVs to monitor.
@@ -71,7 +70,7 @@ grabImagesSettingsPvList=[]
 # First arg is the camera PV prefix.
 # Second arg (optional) is a list of camera setting PVs to be dumped to a file.
 # Third arg (optional) is the image grabbing plugin.
-grab1=pvscan.ImageGrabber('ANDOR1')
+grab1=pvscan.ImageGrabber('13PS10')
 #-------------------------------------------------------------
 
 # --- For UED  --------------------------
@@ -79,7 +78,6 @@ resetFlag=PV(pvPrefix + ':RESET:ENABLE').get()
 radius=PV(pvPrefix + ':RADIUS').get()
 resetMotorPv=motor1
 nResets=PV(pvPrefix + ':NRESETS').get()
-radius2 = -0.60 # --TJL, should be EPICs
 #-------------------------------------------------------------
 
 ### Define scan routine #####################################################
@@ -89,10 +87,7 @@ def resetLoop(grabObject='',nImages=0,resetMotorPv=''):
     pvscan.printMsg('Starting reset loop')
     # Enable shutters 
     pvscan.printMsg('Enabling shutters')
-    #pvscan.shutterFunction(shutterGroup1.ttlInEnable,1)
-    shutter1.open.put(1)
-    shutter2.open.put(1)
-    shutter3.ttlInEnable.put(1)
+    pvscan.shutterFunction(shutterGroup1.ttlInEnable,1)
     pvscan.printSleep(0.5)
     if grabObject:
         if grabObject.grabFlag:
@@ -101,10 +96,10 @@ def resetLoop(grabObject='',nImages=0,resetMotorPv=''):
     #grabObject.grabImages(nImages)
     # Disable shutters 
     pvscan.printMsg('Disabling shutters')
-    pvscan.shutterFunction(shutterGroup1.ttlInDisable,1)
+    pvscan.shutterFunction(shutterGroup1.ttlInDisable,0)
     # Close shutters
     pvscan.printMsg('Closing shutters')
-    pvscan.shutterFunction(shutterGroup1.close,1)
+    pvscan.shutterFunction(shutterGroup1.close,0)
     pvscan.printMsg('Reset loop done')
 
 def motorScan(motor1,motor2,motor3,grabObject='',nImages=0,radius=0,resetFlag=0,resetMotorPv=''):
@@ -119,13 +114,13 @@ def motorScan(motor1,motor2,motor3,grabObject='',nImages=0,radius=0,resetFlag=0,
         newPos0=motor1.start + i*inc
         newPos1=newPos0 + motor1.offset
         pvscan.printMsg('Moving %s to %f' % (motor1.pvname,newPos1))
-        motor1.move(newPos1,timeout=30)
+        motor1.move(newPos1,timeout=300)
         # Move motor 2
-        newPos2=motor2.offset + radius*math.cos(newPos0*math.pi/180) - radius2*math.sin(newPos0*math.pi/180)
+        newPos2=motor2.offset + radius*math.cos(newPos0*math.pi/180)
         pvscan.printMsg('Moving %s to %f' % (motor2.pvname,newPos2))
         motor2.move(newPos2)
         # Move motor 3
-        newPos3=motor3.offset + radius*math.sin(newPos0*math.pi/180) + radius2*math.cos(newPos0*math.pi/180)
+        newPos3=motor3.offset + radius*math.sin(newPos0*math.pi/180)
         pvscan.printMsg('Moving %s to %f' % (motor3.pvname,newPos3))
         motor3.move(newPos3)
         pvscan.printSleep(motor1.settletime,'Settling')
@@ -144,22 +139,18 @@ def scanRoutine():
     "This is the scan routine"
     pvscan.printMsg('Starting')
     sleep(0.5) # Collect some initial data first
-    # Close shutters and set to Fast Mode
-    pvscan.printMsg('Closing shutters')
-    pvscan.shutterFunction(shutterGroup1.close,1)
-    pvscan.shutterFunction(shutterGroup1.fast,1)
-    sleep(0.5)
-    # Make sure shutters are closed
-    #pvScan.shutterCheck(shutterRBVPVList)
-    # Do motor scan
+    # Open shutters
+    pvscan.printMsg('Opening shutters')
+    pvscan.shutterFunction(shutterGroup1.open,1)
+    # Scan delay stage and grab images...
     if exp1.scanflag:
-        uedDAEMotorScan(motor1,motor2,motor3,grab1,nResets,radius,resetFlag,resetMotorPv)
+        motorScan(motor1,motor2,motor3,grab1,nResets,radius,resetFlag,resetMotorPv)
     else:
         sleep(2)
-    # Close shutters and set back to Soft Mode
+    #pvscan.Motor.pv1DScan(motor1,grab1)
+    # Close shutters
     pvscan.printMsg('Closing shutters')
     pvscan.shutterFunction(shutterGroup1.close,0)
-    pvscan.shutterFunction(shutterGroup1.soft,0)
     pvscan.printMsg('Done')
 
 ### Main program ##########################################################3
