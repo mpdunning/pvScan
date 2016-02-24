@@ -22,11 +22,11 @@ pid=pvscan.pidPV.get()
 # Create Motor objects, one for each PV you are scanning. 
 # First argument is the scan PV, leave blank to get from pvScan IOC. 
 # Second arg is an index which should be unique.
-motor1=pvScan.PolluxMotor('ASTA:POLX01:AO:ABSMOV',1)  # (UED pitch motor)
-motor2=pvScan.Motor('MOTR:AS01:MC02:CH8:MOTOR',2)  # (UED Y motor)
-motor3=pvScan.Motor('MOTR:AS01:MC02:CH2:MOTOR',3)  # (UED Z motor)
-motor4=pvScan.Motor('MOTR:AS01:MC02:CH7:MOTOR',4)  # (UED X motor)
-motor5=pvScan.Motor('MOTR:AS01:MC01:CH8:MOTOR',5)  # (UED Delay motor)
+motor1=pvscan.PolluxMotor('ASTA:POLX01:AO:ABSMOV',1)  # (UED pitch motor)
+motor2=pvscan.Motor('MOTR:AS01:MC02:CH8:MOTOR',2)  # (UED Y motor)
+motor3=pvscan.Motor('MOTR:AS01:MC02:CH2:MOTOR',3)  # (UED Z motor)
+motor4=pvscan.Motor('MOTR:AS01:MC02:CH7:MOTOR',4)  # (UED X motor)
+motor5=pvscan.Motor('MOTR:AS01:MC01:CH8:MOTOR',5)  # (UED Delay motor)
 
 #--- Shutters -----------------------------------------
 # Create Shutter objects. 

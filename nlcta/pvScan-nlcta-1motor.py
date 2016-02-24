@@ -104,7 +104,7 @@ if __name__ == "__main__":
         pvscan.Tee(dataLog1.logFilename, 'w')
         pvscan.dataFlag=1  # Start logging data when thread starts
         if dataLog1.dataEnable==1:
-            datalogthread=Thread(target=pvscan.DataLogger.datalog,args=(dataLog1,))
+            datalogthread=Thread(target=dataLog1.datalog,args=())
             datalogthread.start()
         scanRoutine()
         sleep(2) # Log data for a little longer

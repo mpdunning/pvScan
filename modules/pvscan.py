@@ -43,17 +43,30 @@ now=timestamp('s')
         
 class Experiment:
     "Sets experiment name and filepath"
-    def __init__(self, expname='',filepath=''):
+    def __init__(self, expname='',filepath='',scanname=''):
         expname=PV(pvPrefix + ':IOC.DESC').get()
         if ' ' in expname: expname=expname.replace(' ','_')
-        self.expname=expname
+        scanname=PV(pvPrefix + ':SCAN:NAME').get()
+        if ' ' in scanname: scanname=scanname.replace(' ','_')
+        filepathAutoset=PV(pvPrefix + ':DATA:FILEPATH:AUTOSET').get()
         if not filepath:
-            if os.environ['NFSHOME']:
-                filepath=os.environ['NFSHOME'] + '/pvScan/' + self.expname + '/' +  now + '/'
+            if filepathAutoset: 
+                if os.environ['NFSHOME']:
+                    filepath=os.environ['NFSHOME'] + '/pvScan/' + expname + '/' +  now + '_' + scanname + '/'
+                else:
+                    filepath='~/pvScan/' + expname + '/' +  now + '_' + scanname + '/'
             else:
-                filepath='~/pvScan/' + self.expname + '/' +  now + '/'
-        if not os.path.exists(filepath): os.makedirs(filepath)
+                filepath=PV(pvPrefix + ':DATA:FILEPATH').get(as_string=True)
+                if not filepath.endswith('/'): filepath=filepath + '/'
+                if ' ' in filepath: filepath=filepath.replace(' ','_')
+                #if os.path.exists(filepath): 
+                #    msgPv.put('Failed: Filepath already exists')
+                #    raise Exception('Filepath already exists')
+        #if not os.path.exists(filepath): os.makedirs(filepath)
+        self.expname=expname
+        self.scanname=scanname
         self.filepath=filepath
+        self.filepathAutoset=filepathAutoset
         self.scanflag=PV(pvPrefix + ':SCAN:ENABLE').get()
 
 class Tee(object):
@@ -76,11 +89,11 @@ class ScanPv(PV):
         if rbv: self.rbv=PV(rbv)
         if not pvname: pvname=PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':PVNAME').get()
         PV.__init__(self,pvname)
-        if not self.status:
-            print 'PV object: ', self
-            print 'PV status: ', self.status
-            printMsg('PV %s not valid' % (self.pvname))
-            raise Exception('PV %s not valid' % (self.pvname))
+        #if not self.status:
+        #    print 'PV object: ', self
+        #    print 'PV status: ', self.status
+        #    printMsg('PV %s not valid' % (self.pvname))
+        #    raise Exception('PV %s not valid' % (self.pvname))
         if pvnumber:
             self.desc= PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':DESC').get()
             if ' ' in self.desc: self.desc=self.desc.replace(' ','_')
@@ -164,14 +177,18 @@ class PolluxMotor(Motor):
 
 class Shutter(PV):
     "Shutter class which inherits from pyEpics PV class."
-    def __init__(self,pvname,rbvpv=''):
+    def __init__(self,pvname,rbvpv='',number=0):
         PV.__init__(self,pvname)
         self.rbv=PV(rbvpv) if rbvpv else ''
+        if number:
+            self.enabled= PV(pvPrefix + ':SHUTTER' + str(number) + ':ENABLE').get()
+        self.number=number
+                
 
 class LSCShutter(Shutter):
     "Lambda SC shutter class which inherits from Shutter class."
-    def __init__(self,pvname,rbvpv=''):
-        Shutter.__init__(self,pvname,rbvpv)
+    def __init__(self,pvname,rbvpv='',number=0):
+        Shutter.__init__(self,pvname,rbvpv,number)
         self.OCStatus=PV(':'.join(pvname.split(':')[0:2]) + ':STATUS:OC')
         self.ttlInEnable=PV(':'.join(pvname.split(':')[0:2]) + ':TTL:IN:HIGH')
         self.ttlInDisable=PV(':'.join(pvname.split(':')[0:2]) + ':TTL:IN:DISABLE')
@@ -182,8 +199,8 @@ class LSCShutter(Shutter):
 
 class DummyShutter(Shutter):
     "Dummy shutter class which inherits from Shutter class. For testing only."
-    def __init__(self,pvname,rbvpv=''):
-        Shutter.__init__(self,pvname,rbvpv)
+    def __init__(self,pvname,rbvpv='',number=0):
+        Shutter.__init__(self,pvname,rbvpv,number)
         self.ttlInEnable=PV(pvname)
         self.ttlInDisable=PV(pvname)
         self.open=PV(pvname)
@@ -221,7 +238,8 @@ class DataLogger(Experiment):
                     pvlist.remove(pv)
                     printMsg('PV %s invalid: removed' % (pv.pvname))
         self.pvlist=pvlist
-        PV(pvPrefix + ':DATA:FILEPATH').put(self.filepath)  # Write filepath to PV for display
+        if self.filepathAutoset:
+            PV(pvPrefix + ':DATA:FILEPATH').put(self.filepath)  # Write filepath to PV for display
         self.dataFilename=self.filepath + now + '.dat'
         PV(pvPrefix + ':DATA:FILENAME').put(self.dataFilename)
         self.logFilename=self.filepath + now + '.log'
@@ -229,6 +247,11 @@ class DataLogger(Experiment):
         self.dataEnable=PV(pvPrefix + ':DATA:ENABLE').get()  # Enable/Disable data logging
         self.dataInt=PV(pvPrefix + ':DATA:INT').get()  # Interval between PV data log points
         self.nPtsMax=100000  # limits number of data points
+        if os.path.exists(self.filepath): 
+            msgPv.put('Failed: Filepath already exists')
+            raise Exception('Filepath already exists')
+        else: 
+            os.makedirs(self.filepath)
 
     def datalog(self):
         "Logs PV data to a file; designed to be run in a separate thread. Uses dataFlag global variable which is shared between threads. PVs must be in pvlist."
@@ -251,12 +274,12 @@ class DataLogger(Experiment):
                         chid  = ca.create_channel(pv.pvname)
                         pvValue = ca.get(chid,timeout=0.9*self.dataInt/len(self.pvlist))
                         pvValue = ca.get(chid)
-                        datafile.write(str(pvValue))
+                        datafile.write(str(pvValue) + ' ')
                     except KeyError:
                         datafile.write('Invalid')
                     except TypeError:
                         datafile.write('Invalid')
-                    datafile.write(' ')
+                    #datafile.write(' ')
                 datafile.write('\n')
                 sleep(self.dataInt)
                 count+=1
@@ -267,14 +290,18 @@ class ImageGrabber(Experiment):
         Experiment.__init__(self)
         if not pvlist:
             if 'ANDOR' in cameraPvPrefix:
-                pvlist=['cam1:BI:NAME.DESC','cam1:AcquireTime_RBV','cam1:AndorEMGain_RBV','cam1:AndorEMGainMode_RBV','cam1:TriggerMode_RBV','cam1:ImageMode_RBV','cam1:ArrayRate_RBV','cam1:DataType_RBV','cam1:ArraySizeX_RBV','cam1:ArraySizeY_RBV','cam1:AndorADCSpeed_RBV','cam1:AndorPreAmpGain_RBV','cam1:ShutterStatus_RBV','cam1:AndorCooler','cam1:Temperature']
+                pvlist=['cam1:BI:NAME.DESC','cam1:AcquireTime_RBV','cam1:AndorEMGain_RBV','cam1:AndorEMGainMode_RBV','cam1:TriggerMode_RBV','cam1:ImageMode_RBV','cam1:ArrayRate_RBV','cam1:DataType_RBV','cam1:ArraySizeX_RBV','cam1:ArraySizeY_RBV','cam1:AndorADCSpeed_RBV','cam1:AndorPreAmpGain_RBV','cam1:ShutterStatus_RBV','cam1:AndorCooler','cam1:TemperatureActual']
             else:
                 pvlist=['cam1:BI:NAME.DESC','cam1:AcquireTime_RBV','cam1:Gain_RBV','cam1:TriggerMode_RBV','cam1:ArrayRate_RBV','cam1:DataType_RBV','cam1:ColorMode_RBV','cam1:ArraySizeX_RBV','cam1:ArraySizeY_RBV']
             for i in xrange(len(pvlist)):
                 pvlist[i]= cameraPvPrefix + ':' + pvlist[i]
-        filepath=self.filepath + 'images/' # This is inherited from Experiment class
+        filepath=self.filepath + 'images' + '-' + cameraPvPrefix + '/' # self.filepath is inherited from Experiment class
         grabFlag=PV(pvPrefix + ':GRABIMAGES:ENABLE').get()
-        if grabFlag and not os.path.exists(filepath): os.makedirs(filepath)
+        if grabFlag and os.path.exists(filepath):
+            msgPv.put('Failed: Image filepath already exists')
+            raise Exception('Image filepath already exists')
+        else:
+            os.makedirs(filepath)
         if plugin=='TIFF1':
             fileExt='.tif'
         elif plugin=='JPEG1':

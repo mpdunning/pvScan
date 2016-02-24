@@ -6,7 +6,7 @@ from epics import PV
 from time import sleep
 import datetime,os,sys
 from threading import Thread
-
+import subprocess
 
 # PV prefix for pvScan IOC; should be passed as an argument to this script.
 pvPrefix=sys.argv[1]
@@ -14,7 +14,7 @@ pvPrefix=sys.argv[1]
 os.environ['PVSCAN_PVPREFIX']=pvPrefix
 
 # Import pvScan module
-sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/prod/modules/')
+sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/R3.1/modules/')
 import pvscan
 
 #--- Experiment ---------------------------------------
@@ -25,21 +25,18 @@ exp1=pvscan.Experiment()
 sleep(2)
 
 #--- Scan PVs ------------------------------------------
-# Create Motor objects, one for each PV you are scanning. 
+# Create ScanPv objects, one for each PV you are scanning. 
 # First argument is the scan PV, leave blank to get from pvScan IOC. 
 # Second arg is an index which should be unique.
-motor1=pvscan.PolluxMotor('ASTA:POLX01:AO:ABSMOV',1)  # (UED Pitch motor)
-#motor1=pvscan.Motor('MOTR:AS01:MC02:CH3:MOTOR',1)  # (UED YAW motor)
-motor2=pvscan.Motor('MOTR:AS01:MC02:CH3:MOTOR',2)  # (UED YAW motor)
-#motor1=pvscan.Motor('MOTR:AS01:MC02:CH3:MOTOR',1)  # (UED YAW motor)
+#scanPv1=pvscan.ScanPv('',1) # (UED Solenoid)
 
 #--- Shutters -----------------------------------------
 # Create Shutter objects. 
 # First argument is shutter PV.
 # Second arg (optional) is an RBV PV, for example an ADC channel.
-shutter1=pvscan.LSCShutter('ASTA:LSC01','ADC:AS01:12:V') # (UED Drive laser)
-shutter2=pvscan.LSCShutter('ASTA:LSC02','ADC:AS01:13:V') # (UED pump laser)
-shutter3=pvscan.LSCShutter('ASTA:LSC03','ADC:AS01:14:V') # (UED HeNe laser)
+shutter1=pvscan.DummyShutter('ESB:GP01:VAL01','ESB:GP01:VAL01') # (UED Drive laser)
+shutter2=pvscan.DummyShutter('ESB:GP01:VAL02','ESB:GP01:VAL02') # (UED pump laser)
+shutter3=pvscan.DummyShutter('ESB:GP01:VAL03','ESB:GP01:VAL03') # (UED HeNe laser)
 #
 # Create ShutterGroup object to use common functions on all shutters.
 # Argument is a list of shutter objects.
@@ -54,8 +51,9 @@ shutterGroup1=pvscan.ShutterGroup([shutter1,shutter2,shutter3])
 
 #---- Data logging --------------------------
 # List of PV() objects to be monitored during scan.  
-# Example: dataLogPvList=shutterGroup1.rbv + [motor1,lsrpwrPv,PV('MY:PV1')] + [PV('MY:PV2')]
-dataLogPvList=shutterGroup1.rbv + [motor1]
+# Example: dataLogPvList=shutterGroup1.rbv + [scanPv1,lsrpwrPv,PV('MY:PV1')] + [PV('MY:PV2')]
+#dataLogPvList=shutterGroup1.rbv + [scanPv1]
+dataLogPvList=shutterGroup1.rbv
 #
 # Create DataLogger object.
 # Argument is the list of PVs to monitor.
@@ -70,24 +68,54 @@ grabImagesSettingsPvList=[]
 # First arg is the camera PV prefix.
 # Second arg (optional) is a list of camera setting PVs to be dumped to a file.
 # Third arg (optional) is the image grabbing plugin.
-grab1=pvscan.ImageGrabber('ANDOR1')
+grab1=pvscan.ImageGrabber('13PS7')
+grab2=pvscan.ImageGrabber('13PS10')
 #-------------------------------------------------------------
+
+#--- UED specifics ------------------------------------------
+LedPv=PV('ESB:GP01:VAL05')
+beamRate=PV(pvPrefix + ':BEAMRATE').get()
+nImages=PV(pvPrefix + ':GRABIMAGES:N').get()
+waitTime=nImages/beamRate
+#-------------------------------------------------------------
+    
 
 ### Define scan routine #####################################################
 
 def scanRoutine():
     "This is the scan routine"
     pvscan.printMsg('Starting')
-    sleep(0.5) # Collect some initial data first
+    #sleep(0.5) # Collect some initial data first
     # Open shutters
     #pvscan.printMsg('Opening shutters')
     #pvscan.shutterFunction(shutterGroup1.open,1)
-    # Scan delay stage and grab images...
-    pvscan.Motor.motor1DScan(motor1,grab1)
-    #pvscan.Motor.pv1DScan(motor1,grab1)
+    # Turn LED on
+    LedPv.put(1)
+    # Grab some images
+    grab1.grabImages(2)
+    # Turn LED off
+    LedPv.put(0)
+    sleep(1)
+    # Grab images in separate thread
+    grab2Thread=Thread(target=grab2.grabImages,args=(nImages,))
+    grab2Thread.start()
+    sleep(1)
+    # Single shot of beam only
+    subprocess.call('/afs/slac/g/testfac/extras/scripts/singleShotUED.py ' + pvPrefix + ' beam', shell=True)
+    sleep(1)
+    # Single shot of beam and pump
+    subprocess.call('/afs/slac/g/testfac/extras/scripts/singleShotUED.py ' + pvPrefix + ' beam-pump', shell=True)
+    sleep(waitTime)
+    # Turn LED on
+    LedPv.put(1)
+    # Grab some images
+    grab1.grabImages(2)
+    # Turn LED off
+    LedPv.put(0)
     # Close shutters
     #pvscan.printMsg('Closing shutters')
     #pvscan.shutterFunction(shutterGroup1.close,0)
+    sleep(1)
     pvscan.printMsg('Done')
 
 ### Main program ##########################################################3
@@ -107,6 +135,7 @@ if __name__ == "__main__":
         pvscan.Tee(dataLog1.logFilename, 'w')
         pvscan.dataFlag=1  # Start logging data when thread starts
         if dataLog1.dataEnable==1:
+            #datalogthread=Thread(target=pvscan.DataLogger.datalog,args=(dataLog1,))
             datalogthread=Thread(target=dataLog1.datalog,args=())
             datalogthread.start()
         scanRoutine()

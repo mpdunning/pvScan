@@ -14,7 +14,7 @@ pvPrefix=sys.argv[1]
 os.environ['PVSCAN_PVPREFIX']=pvPrefix
 
 # Import pvscan module
-sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/prod/modules/')
+sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/R3.1/modules/')
 import pvscan
 
 #--- Experiment ---------------------------------------
@@ -22,7 +22,6 @@ import pvscan
 # First argument (optional) is an experiment name.
 # Second arg (optional) is a filepath.
 exp1=pvscan.Experiment()
-sleep(2)
 
 #--- Scan PVs ------------------------------------------
 # Create Motor objects, one for each PV you are scanning. 
@@ -37,9 +36,10 @@ motor5=pvscan.Motor('ESB:XPS2:m1:MOTR',5)  # (UED Delay motor)
 # Create Shutter objects. 
 # First argument is shutter PV.
 # Second arg (optional) is an RBV PV, for example an ADC channel.
-shutter1=pvscan.DummyShutter('ESB:GP01:VAL01','ESB:GP01:VAL01') # (UED Drive laser)
-shutter2=pvscan.DummyShutter('ESB:GP01:VAL02','ESB:GP01:VAL02') # (UED pump laser)
-shutter3=pvscan.DummyShutter('ESB:GP01:VAL03','ESB:GP01:VAL03') # (UED HeNe laser)
+# Third arg (optional) is a unique shutter number index, which allows enabling/disabling from PVs.
+shutter1=pvscan.DummyShutter('ESB:GP01:VAL01','ESB:GP01:VAL01',1) # (UED Drive laser)
+shutter2=pvscan.DummyShutter('ESB:GP01:VAL02','ESB:GP01:VAL02',2) # (UED pump laser)
+shutter3=pvscan.DummyShutter('ESB:GP01:VAL03','ESB:GP01:VAL03',3) # (UED HeNe laser)
 #
 # Create ShutterGroup object to use common functions on all shutters.
 # Argument is a list of shutter objects.
@@ -82,27 +82,37 @@ nResets=PV(pvPrefix + ':NRESETS').get()
 
 ### Define scan routine #####################################################
 
-def resetLoop(grabObject='',nImages=0,resetMotorPv=''):
+def resetLoop(grabObject='',resetMotorPv=''):
     "Does UED DAE reset routine."
     pvscan.printMsg('Starting reset loop')
-    # Enable shutters 
-    pvscan.printMsg('Enabling shutters')
-    pvscan.shutterFunction(shutterGroup1.ttlInEnable,1)
+    # Open drive laser shutter
+    #shutter1.open.put(1)
+    if shutter2.enabled:
+        pvscan.printMsg('Opening pump shutter')
+        shutter2.open.put(1)
+    # Enable TTL In for HeNe shutter if enabled from PV. 
+    if shutter3.enabled:
+        pvscan.printMsg('Enabling TTL In for HeNe shutter')
+        shutter3.ttlInEnable.put(1)
     pvscan.printSleep(0.5)
     if grabObject:
         if grabObject.grabFlag:
             grabObject.filenameExtras='_' + resetMotorPv.desc + '-' + '{0:08.4f}'.format(resetMotorPv.get())
-            grabObject.grabImages(nImages)
-    #grabObject.grabImages(nImages)
-    # Disable shutters 
-    pvscan.printMsg('Disabling shutters')
-    pvscan.shutterFunction(shutterGroup1.ttlInDisable,0)
-    # Close shutters
-    pvscan.printMsg('Closing shutters')
-    pvscan.shutterFunction(shutterGroup1.close,0)
+            grabObject.grabImages()
+    # Disable TTL In for HeNe shutter if enabled from PV. 
+    if shutter3.enabled:
+        pvscan.printMsg('Disabling TTL In for HeNe shutter')
+        shutter3.ttlInDisable.put(0)
+    # Close pump and HeNe shutters, but only if enabled from PV.
+    if shutter2.enabled:
+        pvscan.printMsg('Closing pump shutter')
+        shutter2.close.put(0)
+    if shutter3.enabled:
+        pvscan.printMsg('Closing HeNe shutter')
+        shutter3.close.put(0)
     pvscan.printMsg('Reset loop done')
 
-def motorScan(motor1,motor2,motor3,grabObject='',nImages=0,radius=0,resetFlag=0,resetMotorPv=''):
+def motorScan(motor1,motor2,motor3,grabObject='',radius=0,resetFlag=0,resetMotorPv=''):
     "Scans motor1 from start to stop in n steps, moving motors 2 and 3 and doing a reset loop at each step."
     initialPos1=motor1.get()
     initialPos2=motor2.get()
@@ -126,7 +136,7 @@ def motorScan(motor1,motor2,motor3,grabObject='',nImages=0,radius=0,resetFlag=0,
         pvscan.printSleep(motor1.settletime,'Settling')
         # Do reset loop if resetFlag==1
         if resetFlag:
-            resetLoop(grabObject,nImages,resetMotorPv)
+            resetLoop(grabObject,resetMotorPv)
     # Move motors back to initial positions
     pvscan.printMsg('Moving %s back to initial position: %f' %(motor1.pvname,initialPos1))
     motor1.move(initialPos1)
@@ -139,18 +149,27 @@ def scanRoutine():
     "This is the scan routine"
     pvscan.printMsg('Starting')
     sleep(0.5) # Collect some initial data first
-    # Open shutters
-    pvscan.printMsg('Opening shutters')
-    pvscan.shutterFunction(shutterGroup1.open,1)
-    # Scan delay stage and grab images...
+    # Close pump and HeNe shutters, but only if enabled from PV.
+    if shutter2.enabled:
+        pvscan.printMsg('Closing pump shutter')
+        shutter2.close.put(0)
+    if shutter3.enabled:
+        pvscan.printMsg('Closing HeNe shutter')
+        shutter3.close.put(0)
+    # Set all shutters to fast mode
+    pvscan.shutterFunction(shutterGroup1.fast,1)
+    # Do motor scan
     if exp1.scanflag:
-        motorScan(motor1,motor2,motor3,grab1,nResets,radius,resetFlag,resetMotorPv)
+        motorScan(motor1,motor2,motor3,grab1,radius,resetFlag,resetMotorPv)
     else:
         sleep(2)
-    #pvscan.Motor.pv1DScan(motor1,grab1)
-    # Close shutters
-    pvscan.printMsg('Closing shutters')
-    pvscan.shutterFunction(shutterGroup1.close,0)
+    # Close pump and HeNe shutters, but only if enabled from PV.
+    if shutter2.enabled:
+        pvscan.printMsg('Closing pump shutter')
+        shutter2.close.put(0)
+    if shutter3.enabled:
+        pvscan.printMsg('Closing HeNe shutter')
+        shutter3.close.put(0)
     pvscan.printMsg('Done')
 
 ### Main program ##########################################################3
@@ -170,7 +189,7 @@ if __name__ == "__main__":
         pvscan.Tee(dataLog1.logFilename, 'w')
         pvscan.dataFlag=1  # Start logging data when thread starts
         if dataLog1.dataEnable==1:
-            datalogthread=Thread(target=pvscan.DataLogger.datalog,args=(dataLog1,))
+            datalogthread=Thread(target=dataLog1.datalog,args=())
             datalogthread.start()
         scanRoutine()
         sleep(2) # Log data for a little longer
