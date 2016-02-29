@@ -39,6 +39,7 @@ shutter3=pvscan.LSCShutter('ASTA:LSC03') # (UED HeNe laser)
 # Create ShutterGroup object to use common functions on all shutters.
 # Argument is a list of shutter objects.
 shutterGroup1=pvscan.ShutterGroup([shutter1,shutter2,shutter3])
+shutterGroup2=pvscan.ShutterGroup([shutter2,shutter3])
 
 ##################################################################################################################            
 def abortRoutine():
@@ -56,10 +57,11 @@ def abortRoutine():
     #pvscan.printMsg('Disabling shutters')
     #pvscan.shutterFunction(shutterGroup1.ttlInDisable,0)
     #sleep(0.5)
-    # Close and disable shutters
-    pvscan.printMsg('Closing shutters')
+    # Close/disable shutters
+    pvscan.printMsg('Disabling TTL In for all shutters')
     pvscan.shutterFunction(shutterGroup1.ttlInDisable,1)
-    pvscan.shutterFunction(shutterGroup1.close,1)
+    pvscan.printMsg('Closing pump and HeNe shutters')
+    pvscan.shutterFunction(shutterGroup2.close,1)
     pvscan.printMsg('Aborted')
 
 

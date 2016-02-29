@@ -100,9 +100,9 @@ if __name__ == "__main__":
             sys.exit(1)
         pid=os.getpid()
         pvscan.pidPV.put(pid)
-        pvscan.Tee(dataLog1.logFilename, 'w')
-        pvscan.dataFlag=1  # Start logging data when thread starts
         if dataLog1.dataEnable==1:
+            pvscan.Tee(dataLog1.logFilename, 'w')
+            pvscan.dataFlag=1  # Start logging data when thread starts
             datalogthread=Thread(target=dataLog1.datalog,args=())
             datalogthread.start()
         scanRoutine()

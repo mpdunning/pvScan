@@ -70,6 +70,7 @@ grabImagesSettingsPvList=[]
 # First arg is the camera PV prefix.
 # Second arg (optional) is a list of camera setting PVs to be dumped to a file.
 # Third arg (optional) is the image grabbing plugin.
+grab0=pvscan.ImageGrabber('13PS7')
 grab1=pvscan.ImageGrabber('13PS10')
 #-------------------------------------------------------------
 
@@ -149,6 +150,9 @@ def scanRoutine():
     "This is the scan routine"
     pvscan.printMsg('Starting')
     sleep(0.5) # Collect some initial data first
+    # Grab images of the sample
+    if grab0.grabFlag: 
+        grab0.grabImages(2)
     # Close pump and HeNe shutters, but only if enabled from PV.
     if shutter2.enabled:
         pvscan.printMsg('Closing pump shutter')
@@ -186,9 +190,9 @@ if __name__ == "__main__":
             sys.exit(1)
         pid=os.getpid()
         pvscan.pidPV.put(pid)
-        pvscan.Tee(dataLog1.logFilename, 'w')
-        pvscan.dataFlag=1  # Start logging data when thread starts
-        if dataLog1.dataEnable==1:
+        if dataLog1.dataEnable:
+            pvscan.Tee(dataLog1.logFilename, 'w')
+            pvscan.dataFlag=1  # Start logging data when thread starts
             datalogthread=Thread(target=dataLog1.datalog,args=())
             datalogthread.start()
         scanRoutine()

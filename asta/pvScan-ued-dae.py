@@ -71,6 +71,7 @@ grabImagesSettingsPvList=[]
 # First arg is the camera PV prefix.
 # Second arg (optional) is a list of camera setting PVs to be dumped to a file.
 # Third arg (optional) is the image grabbing plugin.
+grab0=pvscan.ImageGrabber('ASPS03')
 grab1=pvscan.ImageGrabber('ANDOR1')
 #-------------------------------------------------------------
 
@@ -90,8 +91,8 @@ def resetLoop(grabObject='',resetMotorPv=''):
     # Open drive laser shutter
     #shutter1.open.put(1)
     if shutter2.enabled:
-        pvscan.printMsg('Opening pump shutter')
-        shutter2.open.put(1)
+        pvscan.printMsg('Enabling TTL In for pump shutter')
+        shutter2.ttlInEnable.put(1)
     # Enable TTL In for HeNe shutter if enabled from PV. 
     if shutter3.enabled:
         pvscan.printMsg('Enabling TTL In for HeNe shutter')
@@ -101,6 +102,10 @@ def resetLoop(grabObject='',resetMotorPv=''):
         if grabObject.grabFlag:
             grabObject.filenameExtras='_' + resetMotorPv.desc + '-' + '{0:08.4f}'.format(resetMotorPv.get())
             grabObject.grabImages()
+    # Disable TTL In for pump shutter if enabled from PV. 
+    if shutter2.enabled:
+        pvscan.printMsg('Disabling TTL In for pump shutter')
+        shutter2.ttlInDisable.put(1)
     # Disable TTL In for HeNe shutter if enabled from PV. 
     if shutter3.enabled:
         pvscan.printMsg('Disabling TTL In for HeNe shutter')
@@ -161,6 +166,9 @@ def scanRoutine():
     "This is the scan routine"
     pvscan.printMsg('Starting')
     sleep(0.5) # Collect some initial data first
+    # Grab images of the sample
+    if grab0.grabFlag:
+        grab0.grabImages(5)
     # Close pump and HeNe shutters, but only if enabled from PV.
     if shutter2.enabled:
         pvscan.printMsg('Closing pump shutter')
@@ -198,9 +206,9 @@ if __name__ == "__main__":
             sys.exit(1)
         pid=os.getpid()
         pvscan.pidPV.put(pid)
-        pvscan.Tee(dataLog1.logFilename, 'w')
-        pvscan.dataFlag=1  # Start logging data when thread starts
-        if dataLog1.dataEnable==1:
+        if dataLog1.dataEnable:
+            pvscan.Tee(dataLog1.logFilename, 'w')
+            pvscan.dataFlag=1  # Start logging data when thread starts
             datalogthread=Thread(target=dataLog1.datalog,args=())
             datalogthread.start()
         scanRoutine()

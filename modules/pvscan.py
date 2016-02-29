@@ -48,21 +48,19 @@ class Experiment:
         if ' ' in expname: expname=expname.replace(' ','_')
         scanname=PV(pvPrefix + ':SCAN:NAME').get()
         if ' ' in scanname: scanname=scanname.replace(' ','_')
+        if scanname: scanname = '_' + scanname
         filepathAutoset=PV(pvPrefix + ':DATA:FILEPATH:AUTOSET').get()
         if not filepath:
             if filepathAutoset: 
                 if os.environ['NFSHOME']:
-                    filepath=os.environ['NFSHOME'] + '/pvScan/' + expname + '/' +  now + '_' + scanname + '/'
+                    filepath=os.environ['NFSHOME'] + '/pvScan/' + expname + '/' +  now + scanname + '/'
                 else:
-                    filepath='~/pvScan/' + expname + '/' +  now + '_' + scanname + '/'
+                    filepath='~/pvScan/' + expname + '/' +  now + scanname + '/'
+                PV(pvPrefix + ':DATA:FILEPATH').put(filepath)  # Write filepath to PV for display
             else:
                 filepath=PV(pvPrefix + ':DATA:FILEPATH').get(as_string=True)
                 if not filepath.endswith('/'): filepath=filepath + '/'
                 if ' ' in filepath: filepath=filepath.replace(' ','_')
-                #if os.path.exists(filepath): 
-                #    msgPv.put('Failed: Filepath already exists')
-                #    raise Exception('Filepath already exists')
-        #if not os.path.exists(filepath): os.makedirs(filepath)
         self.expname=expname
         self.scanname=scanname
         self.filepath=filepath
@@ -116,9 +114,11 @@ class ScanPv(PV):
             print "PV %s RBV is invalid, pausing for %f seconds." %(self.pvname,timeout)
             sleep(timeout)
 
-    def move(self,value):
-        "Put."
+    def move(self,value,wait=False,timeout=300.0):
+        "Put with optional wait."
         PV.put(self,value)
+        if wait:
+            ScanPv.pvWait(self,value,timeout=timeout)
     
     def pv1DScan(self,grabObject=''):
         "Scans pv from start to stop in n steps, optionally grabbing images at each step."
@@ -146,14 +146,12 @@ class Motor(ScanPv):
         self.velo=PV(pvname + '.VELO')
         self.abort=PV(pvname + '.STOP')
 
-    def motorWait(self,val,delta=0.005,timeout=180.0):
-        ScanPv.pvWait(self,val,delta=0.005,timeout=180.0)
+    def motorWait(self,val,delta=0.005,timeout=300.0):
+        ScanPv.pvWait(self,val,delta=0.005,timeout=300.0)
 
-    def move(self,value,wait=True,timeout=180.0):
-        "Put with wait"
-        ScanPv.move(self,value)
-        if wait:
-            Motor.motorWait(self,value,timeout=timeout)
+    def move(self,value,wait=True,timeout=300.0):
+        "Put with optional wait"
+        ScanPv.move(self,value,wait=True,timeout=300.0)
 
     def motor1DScan(self,grabObject=''):
         ScanPv.pv1DScan(self,grabObject)
@@ -238,8 +236,7 @@ class DataLogger(Experiment):
                     pvlist.remove(pv)
                     printMsg('PV %s invalid: removed' % (pv.pvname))
         self.pvlist=pvlist
-        if self.filepathAutoset:
-            PV(pvPrefix + ':DATA:FILEPATH').put(self.filepath)  # Write filepath to PV for display
+        #if self.filepathAutoset:
         self.dataFilename=self.filepath + now + '.dat'
         PV(pvPrefix + ':DATA:FILENAME').put(self.dataFilename)
         self.logFilename=self.filepath + now + '.log'
@@ -247,10 +244,10 @@ class DataLogger(Experiment):
         self.dataEnable=PV(pvPrefix + ':DATA:ENABLE').get()  # Enable/Disable data logging
         self.dataInt=PV(pvPrefix + ':DATA:INT').get()  # Interval between PV data log points
         self.nPtsMax=100000  # limits number of data points
-        if os.path.exists(self.filepath): 
+        if self.dataEnable and os.path.exists(self.filepath): 
             msgPv.put('Failed: Filepath already exists')
             raise Exception('Filepath already exists')
-        else: 
+        elif self.dataEnable and not os.path.exists(self.filepath): 
             os.makedirs(self.filepath)
 
     def datalog(self):
@@ -263,23 +260,25 @@ class DataLogger(Experiment):
                 datafile.write(' ')
             datafile.write('\n')
             count=0
+            #chids=[ca.create_channel(pv.pvname) for pv in self.pvlist] 
+            #[ca.connect_channel(chid) for chid in chids] 
             while dataFlag and count < self.nPtsMax:
                 datafile.write(str(timestamp(1)))
                 datafile.write(' ')
                 for pv in self.pvlist:
+                #for chid in chids:
                     try:
                         #datafile.write(str(pv.value))
                         #datafile.write(str(pv.get(timeout=0.8*self.dataInt,use_monitor=False)))
                         # Must use epics.ca here since PV() timeout doesn't seem to work.
                         chid  = ca.create_channel(pv.pvname)
                         pvValue = ca.get(chid,timeout=0.9*self.dataInt/len(self.pvlist))
-                        pvValue = ca.get(chid)
+                        #pvValue = ca.get(chid)
                         datafile.write(str(pvValue) + ' ')
                     except KeyError:
-                        datafile.write('Invalid')
+                        datafile.write('Invalid ')
                     except TypeError:
-                        datafile.write('Invalid')
-                    #datafile.write(' ')
+                        datafile.write('Invalid ')
                 datafile.write('\n')
                 sleep(self.dataInt)
                 count+=1
@@ -296,11 +295,12 @@ class ImageGrabber(Experiment):
             for i in xrange(len(pvlist)):
                 pvlist[i]= cameraPvPrefix + ':' + pvlist[i]
         filepath=self.filepath + 'images' + '-' + cameraPvPrefix + '/' # self.filepath is inherited from Experiment class
+        PV(pvPrefix + ':IMAGE:FILEPATH').put(filepath)  # Write filepath to PV for "Browse images" button
         grabFlag=PV(pvPrefix + ':GRABIMAGES:ENABLE').get()
         if grabFlag and os.path.exists(filepath):
             msgPv.put('Failed: Image filepath already exists')
             raise Exception('Image filepath already exists')
-        else:
+        elif grabFlag and not os.path.exists(filepath):
             os.makedirs(filepath)
         if plugin=='TIFF1':
             fileExt='.tif'
@@ -317,6 +317,7 @@ class ImageGrabber(Experiment):
         self.fileExt=fileExt
         self.imagePvPrefix=self.cameraPvPrefix + ':' + plugin
         self.filenameExtras=''
+        self.captureMode=PV(pvPrefix + ':GRABIMAGES:CAPTUREMODE').get()
         
 
     def grabImages(self,nImages=0,grabImagesWriteSettingsFlag=1,pause=0.5):
@@ -329,21 +330,34 @@ class ImageGrabber(Experiment):
         PV(self.imagePvPrefix+':FileName').put(self.cameraPvPrefix + self.filenameExtras + '\0')
         PV(self.imagePvPrefix+':AutoIncrement').put(1)
         PV(self.imagePvPrefix+':FileWriteMode').put(1)
-        PV(self.imagePvPrefix+':NumCapture').put(1)
         PV(self.imagePvPrefix+':AutoSave').put(1)
         PV(self.imagePvPrefix+':FileNumber').put(1)
-        if not PV(self.cameraPvPrefix+':cam1:Acquire.RVAL').get(): # If camera is not acquiring...
-            PV(self.cameraPvPrefix+':cam1:Acquire').put(1) # Try to turn acquisition on
+        numCapturePv=PV(self.imagePvPrefix+':NumCapture')
+        # Must define the following PVs before capturing loop below, or else it slows things down
+        templatePv=PV(self.imagePvPrefix+':FileTemplate')
+        capturePv=PV(self.imagePvPrefix+':Capture')
+        acquirePv=PV(self.cameraPvPrefix+':cam1:Acquire')
+        #acquireRawPv=PV(self.cameraPvPrefix+':cam1:Acquire.RVAL')
+        if not acquirePv.get(): # If camera is not acquiring...
+            acquirePv.put(1) # Try to turn acquisition on
             sleep(0.5) # Give camera time to turn on...
-            if not PV(self.cameraPvPrefix+':cam1:Acquire.RVAL').get():
+            if not acquirePv.get():
                 # If unable to acquire, raise exception & quit
                 printMsg('Failed: Camera not acquiring')
                 raise Exception('Camera not acquiring')
-        for i in range(self.nImages):
-            # Set FileTemplate PV and then grab image
-            imageFilenameTemplate='%s%s_' + timestamp(1) + '_%3.3d' + self.fileExt
-            PV(self.imagePvPrefix+':FileTemplate').put(imageFilenameTemplate + '\0')
-            PV(self.imagePvPrefix+':Capture').put(1,wait=True)
+        if self.captureMode: # Buffered mode (no timestamps)
+            numCapturePv.put(self.nImages)
+            imageFilenameTemplate='%s%s_%3.3d' + self.fileExt
+            templatePv.put(imageFilenameTemplate + '\0')
+            capturePv.put(1,wait=True)
+        else: # Individual mode (with timestamps)
+            numCapturePv.put(1)
+            # Capturing loop
+            for i in range(self.nImages):
+                # Set FileTemplate PV and then grab image
+                imageFilenameTemplate='%s%s_' + timestamp(1) + '_%3.3d' + self.fileExt
+                templatePv.put(imageFilenameTemplate + '\0')
+                capturePv.put(1,wait=True)
         if grabImagesWriteSettingsFlag:
             # Write camera settings to file
             settingsFile=self.filepath + 'cameraSettings-' + timestamp() + '.txt'
@@ -352,8 +366,9 @@ class ImageGrabber(Experiment):
                 datafile.write(timestamp() + '\n')
                 datafile.write('-----------------------------------------------------------\n')
                 for pv in self.pvlist:
-                    datafile.write(str(PV(pv).pvname) + ' ')
-                    datafile.write(str(PV(pv).value) + '\n')
+                    pv=PV(pv)
+                    datafile.write(str(pv.pvname) + ' ')
+                    datafile.write(str(pv.value) + '\n')
                 datafile.write('\n')
         printSleep(pause)
 
