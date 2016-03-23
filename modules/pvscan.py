@@ -2,7 +2,7 @@
 # pvScan module
 
 from epics import PV,ca
-from time import sleep
+from time import sleep,time
 import datetime,math,os,sys
 
 try:
@@ -254,34 +254,40 @@ class DataLogger(Experiment):
         "Logs PV data to a file; designed to be run in a separate thread. Uses dataFlag global variable which is shared between threads. PVs must be in pvlist."
         global dataFlag
         with open(self.dataFilename, 'w') as datafile:
-            datafile.write('Timestamp ')
+            datafile.write('%-30s %s' %('PV name', 'PV description\n'))
             for pv in self.pvlist:
-                datafile.write(pv.pvname)
-                datafile.write(' ')
+                datafile.write('%-30s %s' %(pv.pvname, str(PV(pv.pvname + '.DESC').get()) + '\n'))
+            datafile.write('#####################################################################\n')
+            datafile.write('%-22s ' %('Timestamp'))
+            for pv in self.pvlist:
+                datafile.write(pv.pvname + ' ')
             datafile.write('\n')
             count=0
             #chids=[ca.create_channel(pv.pvname) for pv in self.pvlist] 
             #[ca.connect_channel(chid) for chid in chids] 
             while dataFlag and count < self.nPtsMax:
                 datafile.write(str(timestamp(1)))
+                start=time()
                 datafile.write(' ')
                 for pv in self.pvlist:
                 #for chid in chids:
                     try:
-                        #datafile.write(str(pv.value))
+                        datafile.write(str(pv.value) + ' ')
                         #datafile.write(str(pv.get(timeout=0.8*self.dataInt,use_monitor=False)))
                         # Must use epics.ca here since PV() timeout doesn't seem to work.
-                        chid  = ca.create_channel(pv.pvname)
-                        pvValue = ca.get(chid,timeout=0.9*self.dataInt/len(self.pvlist))
+                        #chid  = ca.create_channel(pv.pvname)
+                        #pvValue = ca.get(chid,timeout=0.9*self.dataInt/len(self.pvlist))
                         #pvValue = ca.get(chid)
-                        datafile.write(str(pvValue) + ' ')
+                        #datafile.write(str(pvValue) + ' ')
                     except KeyError:
                         datafile.write('Invalid ')
                     except TypeError:
                         datafile.write('Invalid ')
+                elapsedTime=time()-start
                 datafile.write('\n')
-                sleep(self.dataInt)
                 count+=1
+                if self.dataInt-elapsedTime > 0:
+                    sleep(self.dataInt - elapsedTime)
                
 class ImageGrabber(Experiment):
     "Sets things up to grab images"

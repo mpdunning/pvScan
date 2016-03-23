@@ -38,9 +38,9 @@ motor5=pvscan.Motor('MOTR:AS01:MC01:CH8:MOTOR',5)  # (UED Delay motor)
 # First argument is shutter PV.
 # Second arg (optional) is an RBV PV, for example an ADC channel.
 # Third arg (optional) is a unique shutter number index, which allows enabling/disabling from PVs.
-shutter1=pvscan.LSCShutter('ASTA:LSC01','ADC:AS01:12:V',1) # (UED Drive laser)
-shutter2=pvscan.LSCShutter('ASTA:LSC02','ADC:AS01:13:V',2) # (UED pump laser)
-shutter3=pvscan.LSCShutter('ASTA:LSC03','ADC:AS01:14:V',3) # (UED HeNe laser)
+shutter1=pvscan.LSCShutter('ASTA:LSC01','ADC:AS01:13:V',1) # (UED Drive laser)
+shutter2=pvscan.LSCShutter('ASTA:LSC02','ADC:AS01:14:V',2) # (UED pump laser)
+shutter3=pvscan.LSCShutter('ASTA:LSC03','ADC:AS01:15:V',3) # (UED HeNe laser)
 #
 # Create ShutterGroup object to use common functions on all shutters.
 # Argument is a list of shutter objects.
@@ -52,11 +52,13 @@ shutterGroup1=pvscan.ShutterGroup([shutter1,shutter2,shutter3])
 #toroid0355Pv=PV('ESB:A01:ADC1:AI:CH4')
 #toroid2150Pv=PV('ESB:A01:ADC1:AI:CH5')
 #structureChargePv=PV('ESB:A01:ADC1:CALC:CH1:CONV')
+andorTimestampRBVPv=PV('ANDOR1:TIFF1:TimeStamp_RBV')
+andorCaptureRBVPv=PV('ANDOR1:TIFF1:Capture_RBV')
 
 #---- Data logging --------------------------
 # List of PV() objects to be monitored during scan.  
 # Example: dataLogPvList=shutterGroup1.rbv + [motor1.rbv,lsrpwrPv,PV('MY:PV1')] + [PV('MY:PV2')]
-dataLogPvList=shutterGroup1.rbv + [motor1.rbv,motor2.rbv,motor3.rbv,motor4.rbv,motor5.rbv]
+dataLogPvList= [andorTimestampRBVPv,andorCaptureRBVPv] + shutterGroup1.rbv + [motor1.rbv,motor2.rbv,motor3.rbv,motor4.rbv,motor5.rbv]
 #
 # Create DataLogger object.
 # Argument is the list of PVs to monitor.
