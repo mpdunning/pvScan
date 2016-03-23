@@ -3,7 +3,7 @@
 # mdunning 1/7/16
 
 from epics import PV
-from time import sleep
+from time import sleep,time
 import datetime,os,sys
 from threading import Thread
 
@@ -14,34 +14,44 @@ pvPrefix=sys.argv[1]
 os.environ['PVSCAN_PVPREFIX']=pvPrefix
 
 # Import pvScan module
-sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/prod/modules/')
+start=time()
+sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/R3.2/modules/')
 import pvscan
+end=time()
+print 'Import: ', end-start
 
 #--- Experiment ---------------------------------------
 # Create Experiment object.  Sets default filepath and gets experiment name from PV.
 # First argument (optional) is an experiment name.
 # Second arg (optional) is a filepath.
+start=time()
 exp1=pvscan.Experiment()
-sleep(2)
+end=time()
+print 'Exp.: ', end-start
+#sleep(2)
 
 #--- Scan PVs ------------------------------------------
 # Create ScanPv objects, one for each PV you are scanning. 
-# First argument is the scan PV, leave blank to get from pvScan IOC. 
+# First argument is the scan PV, leave as empty string to get from pvScan IOC. 
 # Second arg is an index which should be unique.
-scanPv1=pvscan.ScanPv('',1) # (UED Solenoid)
+start=time()
+scanPv1=pvscan.ScanPv('',1)
+end=time()
+print 'scanPv: ', end-start
 
 #--- Shutters -----------------------------------------
 # Create Shutter objects. 
 # First argument is shutter PV.
 # Second arg (optional) is an RBV PV, for example an ADC channel.
-shutter1=pvscan.DummyShutter('ESB:GP01:VAL01','ESB:GP01:VAL01') # (UED Drive laser)
-shutter2=pvscan.DummyShutter('ESB:GP01:VAL02','ESB:GP01:VAL02') # (UED pump laser)
-shutter3=pvscan.DummyShutter('ESB:GP01:VAL03','ESB:GP01:VAL03') # (UED HeNe laser)
+# Third arg (optional) is a unique shutter number index, which allows enabling/disabling from PVs.
+shutter1=pvscan.DummyShutter('ESB:GP01:VAL01','ESB:GP01:VAL01',1) # (UED Drive laser)
+shutter2=pvscan.DummyShutter('ESB:GP01:VAL02','ESB:GP01:VAL02',2) # (UED pump laser)
+shutter3=pvscan.DummyShutter('ESB:GP01:VAL03','ESB:GP01:VAL03',3) # (UED HeNe laser)
 #
 # Create ShutterGroup object to use common functions on all shutters.
 # Argument is a list of shutter objects.
 shutterGroup1=pvscan.ShutterGroup([shutter1,shutter2,shutter3])  
-#
+
 #--- Other PVs -----------------
 # Define as PV objects.  Example PV('MY:RANDOM:PV')
 #lsrpwrPv=PV('ESB:A01:ADC1:AI:CH3')
@@ -52,11 +62,14 @@ shutterGroup1=pvscan.ShutterGroup([shutter1,shutter2,shutter3])
 #---- Data logging --------------------------
 # List of PV() objects to be monitored during scan.  
 # Example: dataLogPvList=shutterGroup1.rbv + [scanPv1,lsrpwrPv,PV('MY:PV1')] + [PV('MY:PV2')]
-dataLogPvList=shutterGroup1.rbv + [scanPv1]
+dataLogPvList=shutterGroup1.rbv + [scanPv1.scanpv]
 #
 # Create DataLogger object.
 # Argument is the list of PVs to monitor.
+start=time()
 dataLog1=pvscan.DataLogger(dataLogPvList)
+end=time()
+print 'dataLog: ', end-start
 #-------------------------------------------------
 
 # --- Image grabbing --------------------------
@@ -64,10 +77,13 @@ dataLog1=pvscan.DataLogger(dataLogPvList)
 grabImagesSettingsPvList=[]
 #
 # Create ImageGrabber object.
-# First arg is the camera PV prefix.
+# First arg is the camera PV prefix, leave as empty string to get from pvScan IOC.  
 # Second arg (optional) is a list of camera setting PVs to be dumped to a file.
 # Third arg (optional) is the image grabbing plugin.
-grab1=pvscan.ImageGrabber('13PS10')
+start=time()
+grab1=pvscan.ImageGrabber('')
+end=time()
+print 'grab: ', end-start
 #-------------------------------------------------------------
 
 ### Define scan routine #####################################################
@@ -76,14 +92,28 @@ def scanRoutine():
     "This is the scan routine"
     pvscan.printMsg('Starting')
     sleep(0.5) # Collect some initial data first
-    # Open shutters
-    pvscan.printMsg('Opening shutters')
-    pvscan.shutterFunction(shutterGroup1.open,1)
+    # Open all shutters, but only if enabled from PV.
+    if shutter1.enabled:
+        pvscan.printMsg('Opening drive shutter')
+        shutter1.open.put(1)
+    if shutter2.enabled:
+        pvscan.printMsg('Opening pump shutter')
+        shutter2.open.put(1)
+    if shutter3.enabled:
+        pvscan.printMsg('Opening shutter 3')
+        shutter3.open.put(1)
     # Scan delay stage and grab images...
-    pvscan.ScanPv.pv1DScan(scanPv1,grab1)
-    # Close shutters
-    pvscan.printMsg('Closing shutters')
-    pvscan.shutterFunction(shutterGroup1.close,0)
+    pvscan.pv1DScan(scanPv1.scanpv,grab1)
+    # Close all shutters, but only if enabled from PV.
+    if shutter1.enabled:
+        pvscan.printMsg('Closing drive shutter')
+        shutter1.close.put(0)
+    if shutter2.enabled:
+        pvscan.printMsg('Closing pump shutter')
+        shutter2.close.put(0)
+    if shutter3.enabled:
+        pvscan.printMsg('Closing shutter 3')
+        shutter3.close.put(0)
     pvscan.printMsg('Done')
 
 ### Main program ##########################################################3

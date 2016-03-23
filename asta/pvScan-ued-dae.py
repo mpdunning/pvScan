@@ -5,7 +5,6 @@
 from epics import PV
 from time import sleep
 import datetime,os,sys,math
-from threading import Thread
 
 
 # PV prefix for pvScan IOC; should be passed as an argument to this script.
@@ -13,8 +12,13 @@ pvPrefix=sys.argv[1]
 # Set an environment variable for so pvscan module can use it
 os.environ['PVSCAN_PVPREFIX']=pvPrefix
 
+# For printing status messages to PV
+msgPv=PV(pvPrefix + ':MSG')
+msgPv.put('Initializing...')
+print 'Initializing...'
+
 # Import pvscan module
-sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/prod/modules/')
+sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/R3.1/modules/')
 import pvscan
 
 #--- Experiment ---------------------------------------
@@ -22,6 +26,11 @@ import pvscan
 # First argument (optional) is an experiment name.
 # Second arg (optional) is a filepath.
 exp1=pvscan.Experiment()
+
+#--- Log file ------------------------------
+# Create log file object.  Writes to stdout and to a log file.
+# First arg (optional) is a filename, leave blank to get from pvScan IOC.
+logFile1=pvscan.Tee()
 
 #--- Scan PVs ------------------------------------------
 # Create Motor objects, one for each PV you are scanning. 
@@ -38,9 +47,9 @@ motor5=pvscan.Motor('MOTR:AS01:MC01:CH8:MOTOR',5)  # (UED Delay motor)
 # First argument is shutter PV.
 # Second arg (optional) is an RBV PV, for example an ADC channel.
 # Third arg (optional) is a unique shutter number index, which allows enabling/disabling from PVs.
-shutter1=pvscan.LSCShutter('ASTA:LSC01','ADC:AS01:12:V',1) # (UED Drive laser)
-shutter2=pvscan.LSCShutter('ASTA:LSC02','ADC:AS01:13:V',2) # (UED pump laser)
-shutter3=pvscan.LSCShutter('ASTA:LSC03','ADC:AS01:14:V',3) # (UED HeNe laser)
+shutter1=pvscan.LSCShutter('ASTA:LSC01','ADC:AS01:13:V',1) # (UED Drive laser)
+shutter2=pvscan.LSCShutter('ASTA:LSC02','ADC:AS01:14:V',2) # (UED pump laser)
+shutter3=pvscan.LSCShutter('ASTA:LSC03','ADC:AS01:15:V',3) # (UED HeNe laser)
 #
 # Create ShutterGroup object to use common functions on all shutters.
 # Argument is a list of shutter objects.
@@ -53,35 +62,35 @@ shutterGroup1=pvscan.ShutterGroup([shutter1,shutter2,shutter3])
 #toroid2150Pv=PV('ESB:A01:ADC1:AI:CH5')
 #structureChargePv=PV('ESB:A01:ADC1:CALC:CH1:CONV')
 
-#---- Data logging --------------------------
-# List of PV() objects to be monitored during scan.  
-# Example: dataLogPvList=shutterGroup1.rbv + [motor1.rbv,lsrpwrPv,PV('MY:PV1')] + [PV('MY:PV2')]
-dataLogPvList=shutterGroup1.rbv + [motor1.rbv,motor2.rbv,motor3.rbv,motor4.rbv,motor5.rbv]
-#
-# Create DataLogger object.
-# Argument is the list of PVs to monitor.
-dataLog1=pvscan.DataLogger(dataLogPvList)
-#-------------------------------------------------
-
 # --- Image grabbing --------------------------
 # Override saved camera settings here. Leave empty list to use the default; otherwise add PVs with single quotes.
 grabImagesSettingsPvList=[]
 #
 # Create ImageGrabber object.
-# First arg is the camera PV prefix.
-# Second arg (optional) is a list of camera setting PVs to be dumped to a file.
-# Third arg (optional) is the image grabbing plugin.
-grab0=pvscan.ImageGrabber('ASPS03')
-grab1=pvscan.ImageGrabber('ANDOR1')
+# 1st arg (required) is the camera PV prefix, leave as empty string to get from pvScan IOC.  
+# 2nd arg (optional) is the number of images.
+# 3rd arg (optional) is a list of camera setting PVs to be dumped to a file.
+# 4th arg (optional [TIFF1]) is the image grabbing plugin.
+grab1=pvscan.ImageGrabber('ASPS03',3)  # Sample camera
+grab2=pvscan.ImageGrabber('')  # Get camera from PV
 #-------------------------------------------------------------
 
-# --- For UED  --------------------------
+# --- Experiment specifics  --------------------------
 radius=PV(pvPrefix + ':RADIUS').get()
 resetMotorPv=motor1
 nResets=PV(pvPrefix + ':NRESETS').get()
-#radius2 = -0.60 # --TJL, should be EPICs
 radius2=PV(pvPrefix + ':RADIUS2').get()
 #-------------------------------------------------------------
+
+#---- Data logging --------------------------
+# List of PV() objects to be monitored during scan.  
+# Example: dataLogPvList=shutterGroup1.rbv + [motor1.rbv,lsrpwrPv,PV('MY:PV1')] + [PV('MY:PV2')]
+dataLogPvList=[grab2.timestampRBVPv,grab2.captureRBVPv] + shutterGroup1.rbv + [motor1.rbv,motor2.rbv,motor3.rbv,motor4.rbv,motor5.rbv]
+#
+# Create DataLogger object.
+# Argument is the list of PVs to monitor.
+dataLog1=pvscan.DataLogger(dataLogPvList)
+#-------------------------------------------------
 
 ### Define scan routine #####################################################
 
@@ -190,7 +199,6 @@ def scanRoutine():
     if shutter3.enabled:
         pvscan.printMsg('Closing HeNe shutter')
         shutter3.close.put(1)
-    pvscan.printMsg('Done')
 
 ### Main program ##########################################################3
 
@@ -207,14 +215,14 @@ if __name__ == "__main__":
         pid=os.getpid()
         pvscan.pidPV.put(pid)
         if dataLog1.dataEnable:
-            pvscan.Tee(dataLog1.logFilename, 'w')
-            pvscan.dataFlag=1  # Start logging data when thread starts
-            datalogthread=Thread(target=dataLog1.datalog,args=())
-            datalogthread.start()
+            # Start logging data
+            dataLog1.start()
         scanRoutine()
-        sleep(2) # Log data for a little longer
+        sleep(1) # Log data for a little longer
     finally:
-        pvscan.dataFlag=0  # Stop logging data 
+        # Stop logging data
+        dataLog1.stop()
+        pvscan.printMsg('Done')
 
         
 ### End ##########################################################################

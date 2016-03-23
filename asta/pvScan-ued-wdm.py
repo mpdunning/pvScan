@@ -41,10 +41,10 @@ logFile1=pvscan.Tee()
 # First argument (required) is the scan PV, leave as empty string to get from pvScan IOC. 
 # Second arg (required) is an index which should be unique.
 # Third arg (optional) is an RBV pv name.
-scanPv1=pvscan.ScanPv('',1)
-scanPv2=pvscan.ScanPv('',2)
-scanPv3=pvscan.ScanPv('ESB:XPS1:m6:MOTR', 3, pvtype=1)  # Motor
-scanPv4=pvscan.ScanPv('ESB:XPS1:m3:MOTR', 4, pvtype=1)  # Motor
+scanPv1=pvscan.ScanPv('', 1)
+scanPv2=pvscan.ScanPv('', 2)
+scanPv3=pvscan.ScanPv('MOTR:AS01:MC02:CH2:MOTOR', 3, pvtype=1)  # UED Z Motor
+scanPv4=pvscan.ScanPv('MOTR:AS01:MC02:CH8:MOTOR', 4, pvtype=1)  # UED Y Motor
 
 #--- Shutters -----------------------------------------
 # Create Shutter objects.
@@ -52,9 +52,9 @@ scanPv4=pvscan.ScanPv('ESB:XPS1:m3:MOTR', 4, pvtype=1)  # Motor
 # First argument (required) is the shutter control PV.
 # Second arg (optional) is an RBV PV, for example an ADC channel.
 # Third arg (optional) is a unique shutter number index, which allows enabling/disabling from PVs.
-shutter1=pvscan.DummyShutter('ESB:GP01:VAL01','ESB:GP01:VAL01',1)
-shutter2=pvscan.DummyShutter('ESB:GP01:VAL02','ESB:GP01:VAL02',2)
-shutter3=pvscan.DummyShutter('ESB:GP01:VAL03','ESB:GP01:VAL03',3)
+shutter1=pvscan.LSCShutter('ASTA:LSC01','ADC:AS01:13:V',1)
+shutter2=pvscan.LSCShutter('ASTA:LSC02','ADC:AS01:14:V',2)
+shutter3=pvscan.LSCShutter('ASTA:LSC03','ADC:AS01:15:V',3)
 #
 # Create ShutterGroup object to use common functions on all shutters.
 # Argument is a list of shutter objects.
@@ -72,22 +72,22 @@ shutterGroup1=pvscan.ShutterGroup([shutter1,shutter2,shutter3])
 grabImagesSettingsPvList=[]
 #
 # Create ImageGrabber object.
-# First arg (required) is the camera PV prefix, leave as empty string to get from pvScan IOC.  
-# Second arg (optional) is the number of images.
-# Second arg (optional) is a list of camera setting PVs to be dumped to a file.
-# Third arg (optional [TIFF1]) is the image grabbing plugin.
-grab1=pvscan.ImageGrabber('13PS7',3)  # Sample camera
+# 1st arg (required) is the camera PV prefix, leave as empty string to get from pvScan IOC.  
+# 2nd arg (optional) is the number of images.
+# 3rd arg (optional) is a list of camera setting PVs to be dumped to a file.
+# 4th arg (optional [TIFF1]) is the image grabbing plugin.
+grab1=pvscan.ImageGrabber('ASPS03',3)  # Sample camera
 grab2=pvscan.ImageGrabber('')  # Get camera from PV
 #-------------------------------------------------------------
 
 #--- Experiment specifics ------------------------------------------
-LedPv=PV('ESB:GP01:VAL04')  # PV for sample LED
+LedPv=PV('ASTA:BO:2114-9:BIT3')  # PV for sample LED
 beamRate=PV(pvPrefix + ':BEAMRATE').get()  # Beam rate input parameter; for timing image grabbing
 nImages=grab2.nImages  # N images for sample camera
 grabSampleImagesFlag=PV(pvPrefix + ':GRABIMAGES:SAMPLE').get()
 ssBeamFlag=PV(pvPrefix + ':SCAN:SSBEAM').get()  # Single-shot beam flag
 ssBeamPumpFlag=PV(pvPrefix + ':SCAN:SSBEAMPUMP').get()  # Single-shot beam/pump flag
-waitTime=nImages/beamRate
+waitTime=nImages/beamRate  
 grab1.fileNamePrefix=exp1.targetname  # Add target name to image file prefix
 grab2.fileNamePrefix=exp1.targetname
 zLockFlag=PV(pvPrefix + ':Z:LOCK:ENABLE').get()  # Lock Z stage to Scan PV 1
@@ -115,7 +115,7 @@ elif exp1.scanmode==2 and scanPv1.pvname and scanPv2.pvname:  # 2-pv scan
         dataLogPvList=shutterGroup1.rbv + [scanPv1.scanpv,scanPv2.scanpv]
 else:
     dataLogPvList=shutterGroup1.rbv
-dataLogPvList=[grab2.timestampRBVPv,grab2.captureRBVPv,grab1.captureRBVPv,LedPv] + dataLogPvList
+dataLogPvList=[grab2.timestampRBVPv,grab2.captureRBVPv,grab1.captureRBVPv,LedPv,scanPv3.scanpv.rbv] + dataLogPvList
 #
 # Create DataLogger object.
 # First argument (required) is the list of PVs to monitor.
@@ -144,10 +144,11 @@ def wdmGrabRoutine(filenameExtras=''):
         grab2.filenameExtras=filenameExtras + '_beam'
         grab2Thread=Thread(target=grab2.grabImages,args=())
         grab2Thread.start()
-        sleep(waitTime/2.0)
+        #sleep(waitTime/2.0)
+        #sleep(waitTime/16.0)
         # Single shot of beam only
         pvscan.printMsg('Getting single shot of beam')
-        subprocess.call('/afs/slac/g/testfac/extras/scripts/asta/singleShotUED-test.py ' + pvPrefix + ' beam', shell=True)
+        subprocess.call('/afs/slac/g/testfac/extras/scripts/asta/singleShotUED.py ' + pvPrefix + ' beam', shell=True)
         # Wait for image grabbing to finish
         grab2Thread.join()
         # Wait for capturing to finish
@@ -158,13 +159,15 @@ def wdmGrabRoutine(filenameExtras=''):
         grab2.filenameExtras=filenameExtras + '_beam_pump'
         grab2Thread=Thread(target=grab2.grabImages,args=())
         grab2Thread.start()
-        sleep(waitTime/2.0)
+        #sleep(waitTime/2.0)
+        #sleep(waitTime/16.0)
         # Single shot of beam and pump
         pvscan.printMsg('Getting single shot of beam and pump')
-        subprocess.call('/afs/slac/g/testfac/extras/scripts/asta/singleShotUED-test.py ' + pvPrefix + ' beam-pump', shell=True)
+        subprocess.call('/afs/slac/g/testfac/extras/scripts/asta/singleShotUED.py ' + pvPrefix + ' beam-pump', shell=True)
         grab2Thread.join()
         while grab2.captureRBVPv.get() or grab2.writingRBVPv.get():
             sleep(0.1)
+        #sleep(grab2.nImages*0.5)
     # Grab sample images if enabled from PV
     if grabSampleImagesFlag:
         grabSampleImages(filenameExtras, when='_after')
@@ -199,8 +202,8 @@ def wdmScan(exp,pv1,pv2,pv3,pv4,grabObject=''):
             pvscan.printSleep(pv1.scanpv.settletime,'Settling')
             if exp.scanmode==2 and pv2.scanpv:
                 pvscan.printMsg('Scanning %s from %f to %f in %d steps' % (pv2.scanpv.pvname,pv2.scanpv.start,pv2.scanpv.stop,pv2.scanpv.nsteps))
-                for i in range(pv2.scanpv.nsteps):
-                    newPos2=pv2.scanpv.start + i*inc2
+                for j in range(pv2.scanpv.nsteps):
+                    newPos2=pv2.scanpv.start + j*inc2
                     pvscan.printMsg('Setting %s to %f' % (pv2.scanpv.pvname,newPos2))
                     pv2.scanpv.move(newPos2, delta=delta)
                     pvscan.printSleep(pv2.scanpv.settletime,'Settling')
@@ -257,7 +260,6 @@ def scanRoutine():
     wdmScan(exp1,scanPv1,scanPv2,scanPv3,scanPv4,grab2)
     # Close all shutters, but only if enabled from PV.
     shutterGroup1.close(0)
-    pvscan.printMsg('Done')
 
 ### Main program ##########################################################3
 
@@ -281,6 +283,7 @@ if __name__ == "__main__":
     finally:
         # Stop logging data
         dataLog1.stop()
+        pvscan.printMsg('Done')
 
         
 ### End ##########################################################################
