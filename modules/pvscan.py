@@ -570,8 +570,8 @@ class ImageGrabber(Experiment):
 
     def grabImages(self,nImages=0,grabImagesWriteSettingsFlag=1,pause=0.5):
         "Grabs n images from camera"
-        self.nImages=nImages if nImages else self.nImages
-        printMsg('Grabbing %d images from %s...' % (self.nImages,self.cameraPvPrefix))
+        nImages=nImages if nImages else self.nImages
+        printMsg('Grabbing %d images from %s...' % (nImages,self.cameraPvPrefix))
         PV(self.imagePvPrefix+':EnableCallbacks').put(1)
         # PV().put() seems to need a null terminator when putting strings to waveforms.
         self.filePathPv.put(self.filepath + '\0')
@@ -589,19 +589,19 @@ class ImageGrabber(Experiment):
                 raise Exception('Camera not acquiring')
         imageFilepaths=[]
         if self.captureMode: # Buffered mode (no timestamps)
-            self.numCapturePv.put(self.nImages)
+            self.numCapturePv.put(nImages)
             imageFilenameTemplate='%s%s_%4.4d' + self.fileExt
             self.templatePv.put(imageFilenameTemplate + '\0')
             self.capturePv.put(1,wait=True)
             # Build a list of filenames for (optional) tiff tag file naming
             if self.writeTiffTagsFlag:
-                imageFilepaths=[('%s%s%s_%04d%s' %(self.filepath,self.fileNamePrefix,self.filenameExtras,n+1,self.fileExt)) for n in range(self.nImages)]
+                imageFilepaths=[('%s%s%s_%04d%s' %(self.filepath,self.fileNamePrefix,self.filenameExtras,n+1,self.fileExt)) for n in range(nImages)]
             while self.captureRBVPv.get() or self.writingRBVPv.get():
                 sleep(0.1)
         else: # Individual mode (with timestamps)
             self.numCapturePv.put(1)
             # Capturing loop
-            for i in range(self.nImages):
+            for i in range(nImages):
                 # Set FileTemplate PV and then grab image
                 imageFilenameTemplate='%s%s_' + timestamp(1) + '_%4.4d' + self.fileExt
                 self.templatePv.put(imageFilenameTemplate + '\0')
@@ -641,7 +641,7 @@ class ImageGrabber(Experiment):
                         print 'writeTiffTags: IOError'
                     except NameError:
                         print 'writeTiffTags: PIL not installed'
-        printSleep(pause, string='Grabbed %d images from %s: Pausing' %(self.nImages, self.cameraPvPrefix))
+        printSleep(pause, string='Grabbed %d images from %s: Pausing' %(nImages, self.cameraPvPrefix))
 
 
 def pvNDScan(exp,pv1,pv2,grabObject=''):

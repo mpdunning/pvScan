@@ -98,6 +98,9 @@ ySlope=PV(pvPrefix + ':Y:LOCK:SLOPE').get()  # Slope for Y-lock
 yIntercept=PV(pvPrefix + ':Y:LOCK:INT').get()  # Intercept for Y-lock
 #delta=0.01  # Custom move/wait threshold; passed to move() commands
 delta=PV(pvPrefix + ':SCANPV1:DELTA').get()  # Custom move/wait threshold; passed to move() commands
+sampleCamShutterPv=PV('SHTR:AS01:1:CMD')  # PV for sample cam shutter
+multiStaticFlag=PV(pvPrefix + ':MULTISTATIC:ENABLE').get()  # Use wdmGrabRoutine2 for multiple static images
+nStaticImages=PV(pvPrefix + ':GRABIMAGES:NSTATIC').get()
 #-------------------------------------------------------------
   
 #---- Data logging --------------------------
@@ -144,8 +147,6 @@ def wdmGrabRoutine(filenameExtras=''):
         grab2.filenameExtras=filenameExtras + '_beam'
         grab2Thread=Thread(target=grab2.grabImages,args=())
         grab2Thread.start()
-        #sleep(waitTime/2.0)
-        #sleep(waitTime/16.0)
         # Single shot of beam only
         pvscan.printMsg('Getting single shot of beam')
         subprocess.call('/afs/slac/g/testfac/extras/scripts/asta/singleShotUED.py ' + pvPrefix + ' beam', shell=True)
@@ -154,21 +155,79 @@ def wdmGrabRoutine(filenameExtras=''):
         # Wait for capturing to finish
         while grab2.captureRBVPv.get() or grab2.writingRBVPv.get():
             sleep(0.1)
-    # Grab images of pump in separate thread, if enabled from PV
+    # Grab images of beam/pump in separate thread, if enabled from PV
     if ssBeamPumpFlag:
+        # Close sample cam shutter (0=open, 1=close)
+        pvscan.printMsg('Closing sample cam shutter')
+        sampleCamShutterPv.put(1)
         grab2.filenameExtras=filenameExtras + '_beam_pump'
         grab2Thread=Thread(target=grab2.grabImages,args=())
         grab2Thread.start()
-        #sleep(waitTime/2.0)
-        #sleep(waitTime/16.0)
         # Single shot of beam and pump
         pvscan.printMsg('Getting single shot of beam and pump')
         subprocess.call('/afs/slac/g/testfac/extras/scripts/asta/singleShotUED.py ' + pvPrefix + ' beam-pump', shell=True)
         grab2Thread.join()
         while grab2.captureRBVPv.get() or grab2.writingRBVPv.get():
             sleep(0.1)
+        # Open sample cam shutter (0=open, 1=close)
+        pvscan.printMsg('Opening sample cam shutter')
+        sampleCamShutterPv.put(1)
         #sleep(grab2.nImages*0.5)
     # Grab sample images if enabled from PV
+    if grabSampleImagesFlag:
+        grabSampleImages(filenameExtras, when='_after')
+
+def wdmGrabRoutine2(filenameExtras=''):
+    #--- Grab sample images if enabled from PV ----------------------------------------
+    if grabSampleImagesFlag:
+        grabSampleImages(filenameExtras, when='_before')
+    #--- Grab background images -------------------------------------------------------
+    # Make sure shutters are closed
+    pvscan.printMsg('Closing all shutters')
+    shutter1.close.put(1)
+    shutter2.close.put(1)
+    shutter3.close.put(1)
+    sleep(0.5)
+    grab2.filenameExtras=filenameExtras + '_BG'
+    grab2.grabImages(3)
+    #--- Grab images of beam if enabled from PV ---------------------------------------
+    if ssBeamFlag:
+        grab2.filenameExtras=filenameExtras + '_beam'
+        # Open drive and master shutters 
+        pvscan.printMsg('Opening drive and master shutters')
+        shutter1.open.put(1)
+        shutter3.open.put(1)
+        grab2.grabImages(nStaticImages)
+        # Close drive and master shutters 
+        pvscan.printMsg('Closing drive and master shutters')
+        shutter1.close.put(1)
+        shutter3.close.put(1)
+        sleep(0.5)
+        # Wait for capturing to finish
+        while grab2.captureRBVPv.get() or grab2.writingRBVPv.get():
+            sleep(0.1)
+    #--- Grab images of beam/pump in separate thread, if enabled from PV --------------
+    if ssBeamPumpFlag:
+        # Close sample cam shutter (0=open, 1=close)
+        pvscan.printMsg('Closing sample cam shutter')
+        sampleCamShutterPv.put(1)
+        grab2.filenameExtras=filenameExtras + '_beam_pump'
+        grab2Thread=Thread(target=grab2.grabImages,args=())
+        grab2Thread.start()
+        #shutter3.close.put(1)
+        #shutter2.open.put(1)
+        #sleep(waitTime/2.0)
+        # Single shot of beam and pump
+        pvscan.printMsg('Getting single shot of beam and pump')
+        subprocess.call('/afs/slac/g/testfac/extras/scripts/asta/singleShotUED.py ' + pvPrefix + ' beam-pump', shell=True)
+        grab2Thread.join()
+        while grab2.captureRBVPv.get() or grab2.writingRBVPv.get():
+            sleep(0.1)
+        # Open sample cam shutter (0=open, 1=close)
+        pvscan.printMsg('Opening sample cam shutter')
+        sampleCamShutterPv.put(0)
+        sleep(0.5)
+    #--- Grab sample images if enabled from PV ----------------------------------------
     if grabSampleImagesFlag:
         grabSampleImages(filenameExtras, when='_after')
 
@@ -213,7 +272,10 @@ def wdmScan(exp,pv1,pv2,pv3,pv4,grabObject=''):
                                 grabObject.filenameExtras= '_' + pv1.scanpv.desc + '-' + '{0:03d}'.format(i+1) + '-' + '{0:08.4f}'.format(pv1.scanpv.get()) + '_' + pv2.scanpv.desc + '-' + '{0:03d}'.format(j+1) + '-' + '{0:08.4f}'.format(pv2.scanpv.get())
                             else:
                                 grabObject.filenameExtras= '_' + pv1.scanpv.desc + '-' + '{0:08.4f}'.format(pv1.scanpv.get()) + '_' + pv2.scanpv.desc + '-' + '{0:08.4f}'.format(pv2.scanpv.get())
-                            wdmGrabRoutine(grabObject.filenameExtras)
+                            if multiStaticFlag:
+                                wdmGrabRoutine2(grabObject.filenameExtras)
+                            else
+                                wdmGrabRoutine(grabObject.filenameExtras)
             else:
                 if grabObject:
                     if grabObject.grabFlag:
@@ -221,7 +283,10 @@ def wdmScan(exp,pv1,pv2,pv3,pv4,grabObject=''):
                             grabObject.filenameExtras= '_' + pv1.scanpv.desc + '-' + '{0:03d}'.format(i+1) + '-' + '{0:08.4f}'.format(pv1.scanpv.get())
                         else:
                             grabObject.filenameExtras= '_' + pv1.scanpv.desc + '-' + '{0:08.4f}'.format(pv1.scanpv.get())
-                        wdmGrabRoutine(grabObject.filenameExtras)
+                        if multiStaticFlag:
+                            wdmGrabRoutine2(grabObject.filenameExtras)
+                        else
+                            wdmGrabRoutine(grabObject.filenameExtras)
         # Move back to initial positions
         pvscan.printMsg('Setting %s back to initial position: %f' %(pv1.scanpv.pvname,initialPos1))
         pv1.scanpv.move(initialPos1, delta=delta)
@@ -240,7 +305,10 @@ def wdmScan(exp,pv1,pv2,pv3,pv4,grabObject=''):
                 grab1.grabImages()
                 grab2.grabImages()
     elif exp.scanmode==4:  # WDM grab routine only
-        wdmGrabRoutine()
+        if multiStaticFlag:
+            wdmGrabRoutine2(grabObject.filenameExtras)
+        else
+            wdmGrabRoutine(grabObject.filenameExtras)
     else:
         pvscan.printMsg('Scan mode "None" selected or no PVs entered, continuing...')
         sleep(1)
