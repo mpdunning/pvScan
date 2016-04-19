@@ -274,7 +274,7 @@ def wdmScan(exp,pv1,pv2,pv3,pv4,grabObject=''):
                                 grabObject.filenameExtras= '_' + pv1.scanpv.desc + '-' + '{0:08.4f}'.format(pv1.scanpv.get()) + '_' + pv2.scanpv.desc + '-' + '{0:08.4f}'.format(pv2.scanpv.get())
                             if multiStaticFlag:
                                 wdmGrabRoutine2(grabObject.filenameExtras)
-                            else
+                            else:
                                 wdmGrabRoutine(grabObject.filenameExtras)
             else:
                 if grabObject:
@@ -285,7 +285,7 @@ def wdmScan(exp,pv1,pv2,pv3,pv4,grabObject=''):
                             grabObject.filenameExtras= '_' + pv1.scanpv.desc + '-' + '{0:08.4f}'.format(pv1.scanpv.get())
                         if multiStaticFlag:
                             wdmGrabRoutine2(grabObject.filenameExtras)
-                        else
+                        else:
                             wdmGrabRoutine(grabObject.filenameExtras)
         # Move back to initial positions
         pvscan.printMsg('Setting %s back to initial position: %f' %(pv1.scanpv.pvname,initialPos1))
@@ -307,7 +307,7 @@ def wdmScan(exp,pv1,pv2,pv3,pv4,grabObject=''):
     elif exp.scanmode==4:  # WDM grab routine only
         if multiStaticFlag:
             wdmGrabRoutine2(grabObject.filenameExtras)
-        else
+        else:
             wdmGrabRoutine(grabObject.filenameExtras)
     else:
         pvscan.printMsg('Scan mode "None" selected or no PVs entered, continuing...')
