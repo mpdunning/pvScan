@@ -49,7 +49,7 @@ now=timestamp('s')
         
 class Experiment:
     "Sets experiment name, filepath, and scan mode."
-    def __init__(self, expname='',filepath='',scanname=''):
+    def __init__(self, expname=None,filepath=None,scanname=None):
         if not expname:
             expname=PV(pvPrefix + ':IOC.DESC').get()
         if ' ' in expname: expname=expname.replace(' ','_')
@@ -85,7 +85,7 @@ class Experiment:
 
 class Tee(object,Experiment):
     "Writes output to stdout and to log file"
-    def __init__(self, filename=''):
+    def __init__(self, filename=None):
         Experiment.__init__(self)
         logFilename=self.filepath + now + '.log'
         if not filename: filename = logFilename
@@ -114,7 +114,7 @@ class Tee(object,Experiment):
 
 class ScanPv():
     "Creates a PV instance based on the value of PVTYPE PV (selected from edm display)."
-    def __init__(self,pvname,pvnumber=0,rbv='',pvtype=0):
+    def __init__(self,pvname,pvnumber=None,rbv=None,pvtype=None):
         if pvnumber and not pvname: pvname=PV(pvPrefix + ':SCANPV' + str(pvnumber) + ':PVNAME').get()
         self.pvname=pvname
         if self.pvname:
@@ -132,8 +132,10 @@ class ScanPv():
                 scanpv=BeckhoffMotor(self.pvname,self.pvnumber)
             elif pvtype == 4:
                 scanpv=Magnet(self.pvname,self.pvnumber)
+            elif pvtype == 5:
+                scanpv=Lakeshore(self.pvname,self.pvnumber)
             else:
-                scanpv=BasePv(self.pvname,self.pvnumber)
+                scanpv=BasePv(self.pvname,self.pvnumber,self.rbv)
             self.scanpv=scanpv
             self.pvtype=pvtype
             self.pvtypePv=pvtypePv
@@ -143,7 +145,7 @@ class ScanPv():
      
 class BasePv(PV):
     "BasePv class which inherits from pyEpics PV class."
-    def __init__(self,pvname,pvnumber=0,rbv=''):
+    def __init__(self,pvname,pvnumber=0,rbv=None):
         # If no name is entered, raise exception and quit:
         if not pvname: 
             msgPv.put('Failed: Invalid PV')
@@ -165,6 +167,7 @@ class BasePv(PV):
             self.nsteps= PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':NSTEPS').get()
             self.offset= PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':OFFSET').get()
             self.settletime= PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':SETTLETIME').get()
+            self.delta= PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':DELTA').get()
         # Test for PV validity:
         if not self.status:
             print 'PV object: ', self
@@ -186,12 +189,17 @@ class BasePv(PV):
             sleep(timeout)
 
     def move(self,val,wait=False,delta=0.005,timeout=300.0):
+    #def move(self,val,wait=False,delta=0.2,timeout=600.0):
         "Put with optional wait."
         PV.put(self,val)
-        if wait:
+        if wait or self.rbv:
+            if not self.delta:
+                delta=delta
+            else:
+                delta=self.delta
             self.pvWait(val,delta,timeout)
-
-    
+   
+ 
 class Motor(BasePv):
     "Motor class which inherits from BasePv class."
     def __init__(self,pvname,pvnumber=0):
@@ -287,9 +295,30 @@ class Magnet(BasePv):
         BasePv.move(self,value,wait,delta,timeout)
 
 
+class Lakeshore(BasePv):
+    "Lakeshore class which inherits from BasePv class."
+    def __init__(self,pvname,pvnumber=None):
+        if pvname.endswith('RBV'):
+            pvname=pvname.replace('_RBV','')
+            rbv=pvname.replace('OUT','IN')
+            rbv=rbv.replace(':SP','')
+        elif 'IN' in pvname:
+            rbv=pvname
+            pvname=pvname.replace('IN','OUT')
+            pvname+=':SP' 
+        else:
+            rbv=pvname.replace('OUT','IN')
+            rbv=rbv.replace(':SP','')
+        BasePv.__init__(self,pvname,pvnumber,rbv)
+
+    def move(self,value,wait=True,delta=0.2,timeout=600.0):
+        "Put with optional wait"
+        BasePv.move(self,value,wait,delta,timeout)
+
+
 class Shutter(PV):
     "Shutter class which inherits from pyEpics PV class."
-    def __init__(self,pvname,rbvpv='',number=0):
+    def __init__(self,pvname,rbvpv=None,number=0):
         PV.__init__(self,pvname)
         self.rbv=PV(rbvpv) if rbvpv else ''
         if number:
@@ -311,7 +340,7 @@ class Shutter(PV):
 
 class LSCShutter(Shutter):
     "Lambda SC shutter class which inherits from Shutter class."
-    def __init__(self,pvname,rbvpv='',number=0):
+    def __init__(self,pvname,rbvpv=None,number=0):
         Shutter.__init__(self,pvname,rbvpv,number)
         self.OCStatus=PV(':'.join(pvname.split(':')[0:2]) + ':STATUS:OC')
         self.ttlInEnable=PV(':'.join(pvname.split(':')[0:2]) + ':TTL:IN:HIGH')
@@ -324,8 +353,9 @@ class LSCShutter(Shutter):
 
 class DummyShutter(Shutter):
     "Dummy shutter class which inherits from Shutter class. For testing only."
-    def __init__(self,pvname,rbvpv='',number=0):
+    def __init__(self,pvname,rbvpv=None,number=0):
         Shutter.__init__(self,pvname,rbvpv,number)
+        self.OCStatus=PV(pvname)
         self.ttlInEnable=PV(pvname)
         self.ttlInDisable=PV(pvname)
         self.open=PV(pvname)
@@ -553,8 +583,11 @@ class ImageGrabber(Experiment):
         self.filenameExtras=''
         self.grabImagesRatePv=grabImagesRatePv
         self.captureMode=PV(pvPrefix + ':GRABIMAGES:CAPTUREMODE').get()
-        self.writeTiffTagsFlag=PV(pvPrefix + ':GRABIMAGES:TIFFTS').get()
-        self.stepFlag=PV(pvPrefix + ':GRABIMAGES:STEPNUMBER').get()
+        self.writeTiffTagsFlag=PV(pvPrefix + ':GRABIMAGES:TIFFTS').get() # Tiff tag timestamps
+        self.stepFlag=PV(pvPrefix + ':GRABIMAGES:STEPNUMBER').get() # Write step number into filename
+        self.grabSeq2Flag=PV(pvPrefix + ':GRABIMAGES:SEQ2ENABLE').get() # Grab second image sequence after first 
+        self.grabSeq2Delay=PV(pvPrefix + ':GRABIMAGES:SEQ2DELAY').get() # Grab second image sequence after first 
+        self.nImages2=PV(pvPrefix + ':GRABIMAGES:N2').get() # N images for second sequence
         self.numCapturePv=numCapturePv
         self.templatePv=templatePv
         self.capturePv=capturePv
@@ -644,8 +677,8 @@ class ImageGrabber(Experiment):
         printSleep(pause, string='Grabbed %d images from %s: Pausing' %(nImages, self.cameraPvPrefix))
 
 
-def pvNDScan(exp,pv1,pv2,grabObject=''):
-    if 1 <= exp.scanmode <=2 and pv2.scanpv and not pv1.scanpv:
+def pvNDScan(exp,pv1,pv2,grabObject=None,shutter1=None,shutter2=None,shutter3=None):
+    if 1 <= exp.scanmode <=2 and pv2.scanpv and not pv1.scanpv:  # 1- or 2-D scan
         pv1=pv2
         exp.scanmode=1
     if 1 <= exp.scanmode <=2 and pv1.scanpv:
@@ -673,6 +706,8 @@ def pvNDScan(exp,pv1,pv2,grabObject=''):
                                 grabObject.filenameExtras= '_' + pv1.scanpv.desc + '-' + '{0:03d}'.format(i+1) + '-' + '{0:08.4f}'.format(pv1.scanpv.get()) + '_' + pv2.scanpv.desc + '-' + '{0:03d}'.format(j+1) + '-' + '{0:08.4f}'.format(pv2.scanpv.get())
                             else:
                                 grabObject.filenameExtras= '_' + pv1.scanpv.desc + '-' + '{0:08.4f}'.format(pv1.scanpv.get()) + '_' + pv2.scanpv.desc + '-' + '{0:08.4f}'.format(pv2.scanpv.get())
+                            if grabObject.grabSeq2Flag:
+                                pumpedGrabSequence(grabObject,shutter1,shutter2,shutter3)
                             ImageGrabber.grabImages(grabObject)
             else:
                 if grabObject:
@@ -681,6 +716,8 @@ def pvNDScan(exp,pv1,pv2,grabObject=''):
                             grabObject.filenameExtras= '_' + pv1.scanpv.desc + '-' + '{0:03d}'.format(i+1) + '-' + '{0:08.4f}'.format(pv1.scanpv.get())
                         else:
                             grabObject.filenameExtras= '_' + pv1.scanpv.desc + '-' + '{0:08.4f}'.format(pv1.scanpv.get())
+                        if grabObject.grabSeq2Flag:
+                            pumpedGrabSequence(grabObject,shutter1,shutter2,shutter3)
                         ImageGrabber.grabImages(grabObject)
         # Move back to initial positions
         printMsg('Setting %s back to initial position: %f' %(pv1.scanpv.pvname,initialPos1))
@@ -691,11 +728,51 @@ def pvNDScan(exp,pv1,pv2,grabObject=''):
     elif exp.scanmode==3:  # Grab images only
         if grabObject:
             if grabObject.grabFlag:
+                if grabObject.grabSeq2Flag:
+                    pumpedGrabSequence(grabObject,shutter1,shutter2,shutter3)
                 ImageGrabber.grabImages(grabObject)
     else:
         printMsg('Scan mode "None" selected or no PVs entered, continuing...')
         sleep(1)
-    
+   
+def pumpedGrabSequence(grabObject,shutter1,shutter2,shutter3):
+    debug=0
+    printMsg('Starting pumped image sequence')
+    sleep(0.25)
+    shutter1Stat=shutter1.OCStatus.get()
+    shutter2Stat=shutter2.OCStatus.get()
+    shutter3Stat=shutter3.OCStatus.get()
+    #print shutter1Stat, shutter1.OCStatus.get()
+    if debug: print 'shutter stats: %s, %s, %s' %(shutter1.OCStatus.get(),shutter2.OCStatus.get(),shutter3.OCStatus.get())
+    printMsg('Opening shutters 1, 2 and 3')
+    shutter1.open.put(1)
+    shutter2.open.put(1)
+    shutter3.open.put(1)
+    sleep(0.25)
+    if debug: print 'shutter stats: %s, %s, %s' %(shutter1.OCStatus.get(),shutter2.OCStatus.get(),shutter3.OCStatus.get())
+    if debug: print grabObject.filenameExtras
+    if 'Static' in grabObject.filenameExtras:
+        grabObject.filenameExtras=grabObject.filenameExtras.replace('Static', 'Pumped')
+    else:
+        grabObject.filenameExtras= '_' + 'Pumped' + grabObject.filenameExtras
+    if debug: print grabObject.filenameExtras
+    ImageGrabber.grabImages(grabObject, grabObject.nImages2)
+    printMsg('Returning shutters to initial state')
+    shutter1.open.put(1) if shutter1Stat==1 else shutter1.close.put(0)
+    shutter2.open.put(1) if shutter2Stat==1 else shutter2.close.put(0)
+    shutter3.open.put(1) if shutter3Stat==1 else shutter3.close.put(0)
+    sleep(0.25)
+    #print shutter1Stat, shutter1.OCStatus.get()
+    if debug: print 'shutter stats: %s, %s, %s' %(shutter1.OCStatus.get(),shutter2.OCStatus.get(),shutter3.OCStatus.get())
+    if debug: print grabObject.filenameExtras
+    if 'Pumped' in grabObject.filenameExtras:
+        grabObject.filenameExtras=grabObject.filenameExtras.replace('Pumped', 'Static')
+    else:
+        grabObject.filenameExtras= '_' + 'Static'
+    if debug: print grabObject.filenameExtras
+    printMsg('Finished pumped image sequence')
+    printSleep(grabObject.grabSeq2Delay)
+
 
 def printMsg(string,pv=msgPv):
     "Prints message to stdout and to message PV."
@@ -714,7 +791,7 @@ def printSleep(sleepTime,string='Pausing',pv=msgPv):
         sleep(sleepTime)
 
 
-def printScanInfo(exp,pv1,pv2=''):
+def printScanInfo(exp,pv1,pv2=None):
     "Prints scan info"
     print '################################'
     print('Scan mode: %s' % (exp.scanmodePv.get(as_string=True)))

@@ -103,13 +103,13 @@ def scanRoutine():
     pvscan2.printMsg('Starting')
     sleep(0.5) # Collect some initial data first
     # Open all shutters, but only if enabled from PV.
-    shutterGroup1.open()
-    shutter1.openCheck()
+    shutterGroup1.open(1)
+    #shutter1.openCheck()
     # Scan delay stage and grab images...
-    pvscan2.pvNDScan(exp1,scanPv1,scanPv2,grab1)
+    pvscan2.pvNDScan(exp1,scanPv1,scanPv2,grab1,shutter1,shutter2,shutter3)
     # Close all shutters, but only if enabled from PV.
     shutterGroup1.close(0)
-    shutterGroup1.closeCheck()
+    #shutterGroup1.closeCheck()
 
 ### Main program ##########################################################3
 

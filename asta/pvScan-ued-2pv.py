@@ -39,6 +39,7 @@ logFile1=pvscan.Tee()
 # Second arg (required) is an index which should be unique.
 # Third arg (optional) is an RBV pv name.
 scanPv1=pvscan.ScanPv('',1)
+#scanPv1=pvscan.ScanPv('',1,'ASTA:LAKE01:IN2')
 scanPv2=pvscan.ScanPv('',2)
 
 #--- Shutters -----------------------------------------
@@ -106,7 +107,7 @@ def scanRoutine():
     shutterGroup1.open()
     #shutter1.openCheck()
     # Scan delay stage and grab images...
-    pvscan.pvNDScan(exp1,scanPv1,scanPv2,grab1)
+    pvscan.pvNDScan(exp1,scanPv1,scanPv2,grab1,shutter1,shutter2,shutter3)
     # Close all shutters, but only if enabled from PV.
     shutterGroup1.close(0)
     #shutterGroup1.closeCheck()
