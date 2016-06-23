@@ -88,7 +88,7 @@ elif exp1.scanmode==2 and scanPv1.pvname and scanPv2.pvname:  # 2-pv scan
         dataLogPvList=shutterGroup1.rbv + [scanPv1.scanpv,scanPv2.scanpv]
 else:
     dataLogPvList=shutterGroup1.rbv
-dataLogPvList=[grab1.timestampRBVPv,grab1.captureRBVPv] + dataLogPvList
+dataLogPvList=[grab1.grabber.timestampRBVPv,grab1.grabber.captureRBVPv] + dataLogPvList
 #
 # Create DataLogger object.
 # First argument (required) is the list of PVs to monitor.

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # pvScan module
 
-from epics import PV,ca
+from epics import PV,ca,caget,caput
 from time import sleep,time
 import datetime,math,os,sys
 import matplotlib.pyplot as plt
@@ -432,6 +432,7 @@ class DataLogger(Experiment, Thread):
                 pvlist2=[PV(line) for line in pvlist2 if line]
             pvlist+=pvlist2  # Add additional monitor PVs to existing PV list
         if pvlist:
+            pvlist=[pv for pv in pvlist if pv]  # Remove "None" PVs
             for pv in pvlist:
                 if not pv.status:
                     pvlist.remove(pv)
@@ -529,9 +530,76 @@ class DataLogger(Experiment, Thread):
     def stop(self):
         self.running=False
 
-               
+
 class ImageGrabber(Experiment):
-    "Sets things up to grab images"
+    "Creates an image grabber class instance"
+    def __init__(self,cameraPvPrefix,nImages=0,pvlist=[],plugin='TIFF1'):
+        if not cameraPvPrefix: cameraPvPrefix=PV(pvPrefix + ':GRABIMAGES:CAMERA').get(as_string=True)
+        if 'DirectD' in cameraPvPrefix:
+            grabber=DDGrabber(cameraPvPrefix)
+        else:
+            grabber=ADGrabber(cameraPvPrefix,nImages,pvlist,plugin)
+        self.grabber=grabber
+
+
+class DDGrabber(Experiment):
+    "UED Direct Detector grabber"
+    def __init__(self,cameraPvPrefix):
+        Experiment.__init__(self)
+        self.cameraPvPrefix=cameraPvPrefix
+        self.grabFlag=PV(pvPrefix + ':GRABIMAGES:ENABLE').get()
+        self.grabSeq2Flag=PV(pvPrefix + ':GRABIMAGES:SEQ2ENABLE').get() # Grab second image sequence after first 
+        self.grabSeq2Delay=PV(pvPrefix + ':GRABIMAGES:SEQ2DELAY').get() # Delay between 1st and 2nd sequence
+        self.stepFlag=PV(pvPrefix + ':GRABIMAGES:STEPNUMBER').get() # Write step number into filename
+        self.dataTime=PV(pvPrefix + ':GRABIMAGES:DATATIME').get() # Data capture time for DirectD
+        self.dataStartStopPv=PV('UED:TST:FILEWRITER:CMD')  # DataWriter start/stop PV
+        self.dataStatusPv=PV('UED:TST:FILEWRITER:STATUS')  # DataWriter status PV
+        self.dataFilenamePv=PV('UED:TST:FILEWRITER:PATH')  # DataWriter filename template PV
+        self.nImages2=None
+        self.filenameExtras=''
+        self.timestampRBVPv=None
+        self.captureRBVPv=None
+
+    def dataWriterStatus(self):
+        status=self.dataStatusPv.get()
+        if status:
+            printMsg('DataWriter status is: ON')
+        else:
+            printMsg('DataWriter status is: OFF')
+        return status
+        
+    def grabImages(self,nImages=0):
+        filenameTemplate='%s/%s%s_%s.HDF5' %(timestamp('today'), self.expname, self.filenameExtras, timestamp(1))
+        self.dataFilenamePv.put(filenameTemplate + '\0')
+        printMsg('Writing %s data for %d seconds...' % (self.cameraPvPrefix, self.dataTime))
+        print 'DirectD filepath: ', filenameTemplate
+        #print self.dataStatusPv.get()
+        #print caget('UED:TST:FILEWRITER:STATUS')
+        self.dataStartStopPv.put(1)
+        #caput('UED:TST:FILEWRITER:CMD',1)
+        sleep(0.25)
+        self.dataStartStopPv.put(1)
+        #caput('UED:TST:FILEWRITER:CMD',1)
+        sleep(0.25)
+        self.dataWriterStatus()
+        #print self.dataStatusPv.get()
+        #print caget('UED:TST:FILEWRITER:STATUS')
+        sleep(self.dataTime)
+        self.dataStartStopPv.put(0)
+        #caput('UED:TST:FILEWRITER:CMD',0)
+        sleep(0.25)
+        self.dataStartStopPv.put(0)
+        #caput('UED:TST:FILEWRITER:CMD',0)
+        sleep(0.25)
+        self.dataWriterStatus()
+        #print caget('UED:TST:FILEWRITER:STATUS')
+        #print self.dataStatusPv.get()
+        printMsg('Done Writing %s data.' % (self.cameraPvPrefix))
+
+
+               
+class ADGrabber(Experiment):
+    "AreaDetector grabber"
     def __init__(self,cameraPvPrefix,nImages=0,pvlist=[],plugin='TIFF1'):
         Experiment.__init__(self)
         if not cameraPvPrefix: cameraPvPrefix=PV(pvPrefix + ':GRABIMAGES:CAMERA').get(as_string=True)
@@ -586,7 +654,7 @@ class ImageGrabber(Experiment):
         self.writeTiffTagsFlag=PV(pvPrefix + ':GRABIMAGES:TIFFTS').get() # Tiff tag timestamps
         self.stepFlag=PV(pvPrefix + ':GRABIMAGES:STEPNUMBER').get() # Write step number into filename
         self.grabSeq2Flag=PV(pvPrefix + ':GRABIMAGES:SEQ2ENABLE').get() # Grab second image sequence after first 
-        self.grabSeq2Delay=PV(pvPrefix + ':GRABIMAGES:SEQ2DELAY').get() # Grab second image sequence after first 
+        self.grabSeq2Delay=PV(pvPrefix + ':GRABIMAGES:SEQ2DELAY').get() 
         self.nImages2=PV(pvPrefix + ':GRABIMAGES:N2').get() # N images for second sequence
         self.numCapturePv=numCapturePv
         self.templatePv=templatePv
@@ -701,24 +769,24 @@ def pvNDScan(exp,pv1,pv2,grabObject=None,shutter1=None,shutter2=None,shutter3=No
                     pv2.scanpv.move(newPos2)
                     printSleep(pv2.scanpv.settletime,'Settling')
                     if grabObject:
-                        if grabObject.grabFlag:
-                            if grabObject.stepFlag:
-                                grabObject.filenameExtras= '_' + pv1.scanpv.desc + '-' + '{0:03d}'.format(i+1) + '-' + '{0:08.4f}'.format(pv1.scanpv.get()) + '_' + pv2.scanpv.desc + '-' + '{0:03d}'.format(j+1) + '-' + '{0:08.4f}'.format(pv2.scanpv.get())
+                        if grabObject.grabber.grabFlag:
+                            if grabObject.grabber.stepFlag:
+                                grabObject.grabber.filenameExtras= '_' + pv1.scanpv.desc + '-' + '{0:03d}'.format(i+1) + '-' + '{0:08.4f}'.format(pv1.scanpv.get()) + '_' + pv2.scanpv.desc + '-' + '{0:03d}'.format(j+1) + '-' + '{0:08.4f}'.format(pv2.scanpv.get())
                             else:
-                                grabObject.filenameExtras= '_' + pv1.scanpv.desc + '-' + '{0:08.4f}'.format(pv1.scanpv.get()) + '_' + pv2.scanpv.desc + '-' + '{0:08.4f}'.format(pv2.scanpv.get())
-                            if grabObject.grabSeq2Flag:
+                                grabObject.grabber.filenameExtras= '_' + pv1.scanpv.desc + '-' + '{0:08.4f}'.format(pv1.scanpv.get()) + '_' + pv2.scanpv.desc + '-' + '{0:08.4f}'.format(pv2.scanpv.get())
+                            if grabObject.grabber.grabSeq2Flag:
                                 pumpedGrabSequence(grabObject,shutter1,shutter2,shutter3)
-                            ImageGrabber.grabImages(grabObject)
+                            grabObject.grabber.grabImages()
             else:
                 if grabObject:
-                    if grabObject.grabFlag:
-                        if grabObject.stepFlag:
-                            grabObject.filenameExtras= '_' + pv1.scanpv.desc + '-' + '{0:03d}'.format(i+1) + '-' + '{0:08.4f}'.format(pv1.scanpv.get())
+                    if grabObject.grabber.grabFlag:
+                        if grabObject.grabber.stepFlag:
+                            grabObject.grabber.filenameExtras= '_' + pv1.scanpv.desc + '-' + '{0:03d}'.format(i+1) + '-' + '{0:08.4f}'.format(pv1.scanpv.get())
                         else:
-                            grabObject.filenameExtras= '_' + pv1.scanpv.desc + '-' + '{0:08.4f}'.format(pv1.scanpv.get())
-                        if grabObject.grabSeq2Flag:
+                            grabObject.grabber.filenameExtras= '_' + pv1.scanpv.desc + '-' + '{0:08.4f}'.format(pv1.scanpv.get())
+                        if grabObject.grabber.grabSeq2Flag:
                             pumpedGrabSequence(grabObject,shutter1,shutter2,shutter3)
-                        ImageGrabber.grabImages(grabObject)
+                        grabObject.grabber.grabImages()
         # Move back to initial positions
         printMsg('Setting %s back to initial position: %f' %(pv1.scanpv.pvname,initialPos1))
         pv1.scanpv.move(initialPos1)
@@ -727,10 +795,10 @@ def pvNDScan(exp,pv1,pv2,grabObject=None,shutter1=None,shutter2=None,shutter3=No
             pv2.scanpv.move(initialPos2)
     elif exp.scanmode==3:  # Grab images only
         if grabObject:
-            if grabObject.grabFlag:
-                if grabObject.grabSeq2Flag:
+            if grabObject.grabber.grabFlag:
+                if grabObject.grabber.grabSeq2Flag:
                     pumpedGrabSequence(grabObject,shutter1,shutter2,shutter3)
-                ImageGrabber.grabImages(grabObject)
+                grabObject.grabber.grabImages()
     else:
         printMsg('Scan mode "None" selected or no PVs entered, continuing...')
         sleep(1)
@@ -750,13 +818,13 @@ def pumpedGrabSequence(grabObject,shutter1,shutter2,shutter3):
     shutter3.open.put(1)
     sleep(0.25)
     if debug: print 'shutter stats: %s, %s, %s' %(shutter1.OCStatus.get(),shutter2.OCStatus.get(),shutter3.OCStatus.get())
-    if debug: print grabObject.filenameExtras
-    if 'Static' in grabObject.filenameExtras:
-        grabObject.filenameExtras=grabObject.filenameExtras.replace('Static', 'Pumped')
+    if debug: print grabObject.grabber.filenameExtras
+    if 'Static' in grabObject.grabber.filenameExtras:
+        grabObject.grabber.filenameExtras=grabObject.grabber.filenameExtras.replace('Static', 'Pumped')
     else:
-        grabObject.filenameExtras= '_' + 'Pumped' + grabObject.filenameExtras
-    if debug: print grabObject.filenameExtras
-    ImageGrabber.grabImages(grabObject, grabObject.nImages2)
+        grabObject.grabber.filenameExtras= '_' + 'Pumped' + grabObject.grabber.filenameExtras
+    if debug: print grabObject.grabber.filenameExtras
+    grabObject.grabber.grabImages(grabObject.grabber.nImages2)
     printMsg('Returning shutters to initial state')
     shutter1.open.put(1) if shutter1Stat==1 else shutter1.close.put(0)
     shutter2.open.put(1) if shutter2Stat==1 else shutter2.close.put(0)
@@ -764,14 +832,14 @@ def pumpedGrabSequence(grabObject,shutter1,shutter2,shutter3):
     sleep(0.25)
     #print shutter1Stat, shutter1.OCStatus.get()
     if debug: print 'shutter stats: %s, %s, %s' %(shutter1.OCStatus.get(),shutter2.OCStatus.get(),shutter3.OCStatus.get())
-    if debug: print grabObject.filenameExtras
-    if 'Pumped' in grabObject.filenameExtras:
-        grabObject.filenameExtras=grabObject.filenameExtras.replace('Pumped', 'Static')
+    if debug: print grabObject.grabber.filenameExtras
+    if 'Pumped' in grabObject.grabber.filenameExtras:
+        grabObject.grabber.filenameExtras=grabObject.grabber.filenameExtras.replace('Pumped', 'Static')
     else:
-        grabObject.filenameExtras= '_' + 'Static'
-    if debug: print grabObject.filenameExtras
+        grabObject.grabber.filenameExtras= '_' + 'Static'
+    if debug: print grabObject.grabber.filenameExtras
     printMsg('Finished pumped image sequence')
-    printSleep(grabObject.grabSeq2Delay)
+    printSleep(grabObject.grabber.grabSeq2Delay)
 
 
 def printMsg(string,pv=msgPv):
