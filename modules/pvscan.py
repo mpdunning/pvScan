@@ -209,9 +209,9 @@ class Motor(BasePv):
     def __init__(self, pvname, pvnumber=0):
         if pvname.endswith('.RBV'):
             rbv = pvname
-            velo = pvname.rstrip('.RBV') + '.VELO'
-            abort = pvname.rstrip('.RBV') + '.STOP'
-            pvname = pvname.rstrip('.RBV')
+            velo = pvname.replace('.RBV', '.VELO')
+            abort = pvname.replace('.RBV', '.STOP')
+            pvname = pvname.replace('.RBV', '')
         else:
             rbv = pvname + '.RBV'
             velo = pvname + '.VELO'
@@ -262,15 +262,18 @@ class PolluxMotor(Motor):
 class BeckhoffMotor(Motor):
     """Beckhoff Motor class which inherits from pvScan Motor class."""
     def __init__(self, pvname, pvnumber=0):
-        if 'CALC' in pvname:
-            rbv = pvname.split(':')[0] + ':CALC:' + ':'.join(pvname.split(':')[2:4]) + ':POS:MM'
-            go = pvname.split(':')[0] + ':BO:' + ':'.join(pvname.split(':')[2:4]) + ':GO:POS'
-            abort = pvname.split(':')[0] + ':BO:' + ':'.join(pvname.split(':')[2:4]) + ':STOP'
-            pvname = pvname.split(':')[0] + ':AO:SC:' + ':'.join(pvname.split(':')[2:4]) + ':SET:POS:MM'
-        else:   
+        if 'ESB' in pvname:
             rbv = pvname.split(':')[0] + ':CALC:' + ':'.join(pvname.split(':')[3:5]) + ':POS:MM'
             go = pvname.split(':')[0] + ':BO:' + ':'.join(pvname.split(':')[3:5]) + ':GO:POS'
             abort = pvname.split(':')[0] + ':BO:' + ':'.join(pvname.split(':')[3:5]) + ':STOP'
+        elif 'UEDM' in pvname:
+            rbv = pvname.split(':')[0] + ':UEDM:' + 'AI:' + pvname.split(':')[-2] + ':POS'
+            go = pvname.split(':')[0] + ':UEDM:' + 'BO:' + pvname.split(':')[-2] + ':GOPOS'
+            abort = pvname.split(':')[0] + ':UEDM:' + pvname.split(':')[-2] + ':STOP'
+        else:
+            rbv = pvname.split(':')[0] + ':CALC:' + ':'.join(pvname.split(':')[2:3]) + ':POS:MM'
+            go = pvname.split(':')[0] + ':BO:' + ':'.join(pvname.split(':')[2:3]) + ':GO:POS:ABS'
+            abort = pvname.split(':')[0] + ':BO:' + ':'.join(pvname.split(':')[2:3]) + ':STOP'
         BasePv.__init__(self, pvname, pvnumber, rbv)
         self.go = PV(go)
         self.abort = PV(abort)
