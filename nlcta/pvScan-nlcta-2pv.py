@@ -19,40 +19,42 @@ print 'Initializing...'
 
 # Import pvScan module
 sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/prod/modules/')
-import pvscan
+import pvscan2
+
+#***** Skipped arguments must use 'None' before a non-zero argument. *****
 
 #--- Experiment ---------------------------------------
-# Create Experiment object.  Sets default filepath and gets experiment name from PV.
-# First argument (optional) is an experiment name, leave blank to get from pvScan IOC.
-# Second arg (optional) is a filepath, leave blank to get from pvScan IOC.
-# Third arg (optional) is a scan name, leave blank to get from pvScan IOC.
-exp1=pvscan.Experiment()
+# Create Experiment object.  Sets experiment name and filepath.
+# 1st arg (optional) is an experiment name, is skipped will get from pvScan IOC.
+# 2nd arg (optional) is a filepath, use default.
+# 3rd arg (optional) is a scan name, if skipped will get from pvScan IOC.
+exp1=pvscan2.Experiment()
 
 #--- Log file ------------------------------
 # Create log file object.  Writes to stdout and to a log file.
-# First arg (optional) is a filename, leave blank to get from pvScan IOC.
-logFile1=pvscan.Tee()
+# 1st arg (optional) is a filename, if skipped will use default.
+logFile1=pvscan2.Tee()
 
 #--- Scan PVs ------------------------------------------
 # Create ScanPv objects, one for each PV you are scanning. 
-# First argument (required) is the scan PV, leave as empty string to get from pvScan IOC. 
-# Second arg (required) is an index which should be unique.
-# Third arg (optional) is an RBV pv name.
-scanPv1=pvscan.ScanPv('',1)
-scanPv2=pvscan.ScanPv('',2)
+# 1st arg (required) is the scan PV, use 'None' to get from pvScan IOC. 
+# 2nd arg (required) is an index which should be unique.
+# 3rd arg (optional) is an RBV pv name.
+scanPv1=pvscan2.ScanPv(None, 1)
+scanPv2=pvscan2.ScanPv(None, 2)
 
 #--- Shutters -----------------------------------------
 # Create Shutter objects. 
-# First argument (required) is the shutter control PV.
-# Second arg (optional) is an RBV PV, for example an ADC channel.
-# Third arg (optional) is a unique shutter number index, which allows enabling/disabling from PVs.
-shutter1=pvscan.DummyShutter('ESB:GP01:VAL01','ESB:GP01:VAL01',1) # (UED Drive laser)
-shutter2=pvscan.DummyShutter('ESB:GP01:VAL02','ESB:GP01:VAL02',2) # (UED pump laser)
-shutter3=pvscan.DummyShutter('ESB:GP01:VAL03','ESB:GP01:VAL03',3) # (UED HeNe laser)
+# 1st arg (required) is the shutter control PV.
+# 2nd arg (optional) is an RBV PV, for example an ADC channel.
+# 3rd arg (optional) is a unique shutter number index, which allows enabling/disabling from PVs.
+shutter1=pvscan2.DummyShutter('ESB:GP01:VAL01','ESB:GP01:VAL01',1) # (UED Drive laser)
+shutter2=pvscan2.DummyShutter('ESB:GP01:VAL02','ESB:GP01:VAL02',2) # (UED pump laser)
+shutter3=pvscan2.DummyShutter('ESB:GP01:VAL03','ESB:GP01:VAL03',3) # (UED HeNe laser)
 #
 # Create ShutterGroup object to use common functions on all shutters.
 # Argument is a list of shutter objects.
-shutterGroup1=pvscan.ShutterGroup([shutter1,shutter2,shutter3])  
+shutterGroup1=pvscan2.ShutterGroup([shutter1,shutter2,shutter3])  
 #
 #--- Other PVs -----------------
 # Define as PV objects.  Example PV('MY:RANDOM:PV')
@@ -65,11 +67,11 @@ shutterGroup1=pvscan.ShutterGroup([shutter1,shutter2,shutter3])
 grabImagesSettingsPvList=[]
 #
 # Create ImageGrabber object.
-# 1st arg (required) is the camera PV prefix, leave as empty string to get from pvScan IOC.  
-# 2nd arg (optional) is the number of images.
-# 3rd arg (optional) is a list of camera setting PVs to be dumped to a file.
-# 4th arg (optional [TIFF1]) is the image grabbing plugin.
-grab1=pvscan.ImageGrabber('')  # Get camera from PV
+# 1st arg (optional) is the camera PV prefix, if skipped will get from pvScan IOC. 
+# 2nd arg (optional) is the number of images, if skipped will get from pvScan IOC.
+# 3rd arg (optional) is a list of camera setting PVs to be dumped to a file, if skipped will use default.
+# 4th arg (optional) is the image grabbing plugin, if skipped will use default [TIFF1].
+grab1=pvscan2.ImageGrabber()  # Get camera from PV
 #-------------------------------------------------------------
 
 #---- Data logging --------------------------
@@ -91,7 +93,7 @@ dataLogPvList=[grab1.grabber.timestampRBVPv,grab1.grabber.captureRBVPv] + dataLo
 #
 # Create DataLogger object.
 # First argument (required) is the list of PVs to monitor.
-dataLog1=pvscan.DataLogger(dataLogPvList)
+dataLog1=pvscan2.DataLogger(dataLogPvList)
 #-------------------------------------------------
 
 ### Define scan routine #####################################################
@@ -99,14 +101,14 @@ dataLog1=pvscan.DataLogger(dataLogPvList)
 def scanRoutine():
     "This is the scan routine"
     # Print scan info
-    pvscan.printScanInfo(exp1,scanPv1,scanPv2)
-    pvscan.printMsg('Starting')
+    pvscan2.printScanInfo(exp1,scanPv1,scanPv2)
+    pvscan2.printMsg('Starting')
     sleep(0.5) # Collect some initial data first
     # Open all shutters, but only if enabled from PV.
     shutterGroup1.open(1)
     #shutter1.openCheck()
     # Scan delay stage and grab images...
-    pvscan.pvNDScan(exp1,scanPv1,scanPv2,grab1,shutter1,shutter2,shutter3)
+    pvscan2.pvNDScan(exp1,scanPv1,scanPv2,grab1,shutter1,shutter2,shutter3)
     # Close all shutters, but only if enabled from PV.
     shutterGroup1.close(0)
     #shutterGroup1.closeCheck()
@@ -124,7 +126,7 @@ if __name__ == "__main__":
             show_usage()
             sys.exit(1)
         pid=os.getpid()
-        pvscan.pidPV.put(pid)
+        pvscan2.pidPV.put(pid)
         if dataLog1.dataEnable:
             # Start logging data
             dataLog1.start()
@@ -133,7 +135,7 @@ if __name__ == "__main__":
     finally:
         # Stop logging data
         dataLog1.stop()
-        pvscan.printMsg('Done')
+        pvscan2.printMsg('Done')
 
         
 ### End ##########################################################################

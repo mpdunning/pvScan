@@ -23,6 +23,9 @@ import pvscan
 # Get PID PV
 pid=pvscan.pidPV.get()
 
+# For stopping the wrapper script
+runFlagPv=PV(pvPrefix + ':RUNFLAG')
+
 #--- Scan PVs ------------------------------------------
 # Create ScanPv objects, one for each PV you are scanning. 
 # First argument is the scan PV, leave as empty string to get from pvScan IOC. 
@@ -48,6 +51,9 @@ def abortRoutine():
     # Kill scan routine process
     pvscan.printMsg('Killing process %d...' % (pid))
     os.kill(pid, signal.SIGKILL)
+    # Stop the wrapper script
+    pvscan.printMsg('Stopping wrapper script')
+    runFlagPv.put(0)
     # Stop move(s)
     pvscan.printMsg('Stopping move(s)')
     if scanPv1.scanpv:

@@ -4,6 +4,8 @@
 import datetime
 import math
 import os
+import random
+import re
 import sys
 from time import sleep,time
 from threading import Thread
@@ -65,7 +67,8 @@ class Experiment:
         if not filepath:
             if filepathAutoset: 
                 if os.environ['NFSHOME']:
-                    filepath = os.environ['NFSHOME'] + '/pvScan/' + expname + '/' +  now + scanname + '/'
+                    filepath = (os.environ['NFSHOME'] + '/pvScan/' 
+                                + expname + '/' +  now + scanname + '/')
                 else:
                     filepath = '~/pvScan/' + expname + '/' +  now + scanname + '/'
                 PV(pvPrefix + ':DATA:FILEPATH').put(filepath)  # Write filepath to PV for display
@@ -82,6 +85,7 @@ class Experiment:
         self.filepath = filepath
         self.filepathAutoset = filepathAutoset
         self.scanflag = PV(pvPrefix + ':SCAN:ENABLE').get()
+        self.preScanflag = PV(pvPrefix + ':SCAN:PRESCAN').get()
         self.scanmodePv = scanmodePv
         self.scanmode = scanmode
 
@@ -120,7 +124,8 @@ class Tee(object, Experiment):
 class ScanPv():
     """Create a PV instance based on the value of PVTYPE PV (selected from edm display)."""
     def __init__(self, pvname, pvnumber=None, rbv=None, pvtype=None):
-        if pvnumber and not pvname: pvname = PV(pvPrefix + ':SCANPV' + str(pvnumber) + ':PVNAME').get()
+        if pvnumber and not pvname: 
+            pvname = PV(pvPrefix + ':SCANPV' + str(pvnumber) + ':PVNAME').get()
         self.pvname = pvname
         if self.pvname:
             self.pvnumber = pvnumber
@@ -155,7 +160,7 @@ class BasePv(PV):
         if not pvname: 
             msgPv.put('Failed: Invalid PV')
             raise Exception('Invalid PV')
-        PV.__init__(self,pvname)
+        PV.__init__(self, pvname)
         self.pvnumber = pvnumber
         if rbv: rbv = PV(rbv)
         self.rbv = rbv
@@ -170,9 +175,19 @@ class BasePv(PV):
             self.start = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':START').get()
             self.stop = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':STOP').get()
             self.nsteps = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':NSTEPS').get()
+            self.inc = (self.stop - self.start)/(self.nsteps - 1)
+            self.randomScanflag = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':RANDSCAN').get()
+            randValStr = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':RAND_VALS').get(as_string=True)
+            if not self.randomScanflag:
+                self.scanPos = [x for x in frange(self.start, self.stop, self.inc)]
+            else:
+                self.scanPos = self.shuffleString(randValStr)
             self.offset = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':OFFSET').get()
             self.settletime = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':SETTLETIME').get()
             self.delta = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':DELTA').get()
+            self.pre_start = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':PRE_START').get()
+            self.pre_stop = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':PRE_STOP').get()
+            self.pre_nsteps = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':PRE_NSTEPS').get()
         # Test for PV validity:
         if not self.status:
             print 'PV object: ', self
@@ -202,7 +217,19 @@ class BasePv(PV):
             else:
                 delta = self.delta
             self.pvWait(val, delta, timeout)
-   
+
+    def shuffleString(self, strng):
+        """Shuffle a string of values into a random list of floats.
+        Comma, semicolon, and whitespace delimiters recognized, 
+        as well as start:step:stop ranges."""
+        lst = re.split(r'[;,\s]\s*', strng) 
+        rangePat = re.compile(r'([-+]?\d*\.\d+|\d+):([-+]?\d*\.\d+|\d+):([-+]?\d*\.\d+|\d+)')
+        lst = [expandRange(x) if rangePat.match(x) else x for x in lst]
+        lst = flattenList(lst)
+        lst = [float(x) for x in lst if isNumber(x)]
+        random.shuffle(lst)
+        return lst
+
  
 class Motor(BasePv):
     """Motor class which inherits from BasePv class."""
@@ -544,7 +571,8 @@ class DataLogger(Experiment, Thread):
 class ImageGrabber(Experiment):
     """Create an image grabber class instance."""
     def __init__(self, cameraPvPrefix, nImages=0, pvlist=[], plugin='TIFF1'):
-        if not cameraPvPrefix: cameraPvPrefix = PV(pvPrefix + ':GRABIMAGES:CAMERA').get(as_string=True)
+        if not cameraPvPrefix: 
+            cameraPvPrefix = PV(pvPrefix + ':GRABIMAGES:CAMERA').get(as_string=True)
         if 'DirectD' in cameraPvPrefix:
             grabber = DDGrabber(cameraPvPrefix)
         else:
@@ -584,7 +612,8 @@ class DDGrabber(Experiment):
         #filenameTemplate='%s/%s%s_%s' %(timestamp('today'), self.expname, self.filenameExtras, timestamp(1))
         if self.filenameExtras.startswith('_'):
             self.filenameExtras = self.filenameExtras.replace('_', '')
-        filenameTemplate = '%s/%s/%s_%s' %(timestamp('today'), self.expname, self.filenameExtras, timestamp(1))
+        filenameTemplate = ('%s/%s/%s_%s' %(timestamp('today'), self.expname, 
+                            self.filenameExtras, timestamp(1)))
         self.dataFilenamePv.put(filenameTemplate + '\0')
         printMsg('Writing %s data for %d seconds...' % (self.cameraPvPrefix, self.dataTime))
         print 'DirectD filepath: ', filenameTemplate
@@ -617,15 +646,28 @@ class ADGrabber(Experiment):
     """AreaDetector grabber."""
     def __init__(self, cameraPvPrefix, nImages=0, pvlist=[], plugin='TIFF1'):
         Experiment.__init__(self)
-        if not cameraPvPrefix: cameraPvPrefix = PV(pvPrefix + ':GRABIMAGES:CAMERA').get(as_string=True)
+        if not cameraPvPrefix: 
+            cameraPvPrefix = PV(pvPrefix + ':GRABIMAGES:CAMERA').get(as_string=True)
         if not pvlist:
             if 'ANDOR' in cameraPvPrefix:
-                pvlist = ['cam1:BI:NAME.DESC','cam1:AcquireTime_RBV','cam1:AndorEMGain_RBV','cam1:AndorEMGainMode_RBV','cam1:TriggerMode_RBV','cam1:ImageMode_RBV','cam1:ArrayRate_RBV','cam1:DataType_RBV','cam1:ArraySizeX_RBV','cam1:ArraySizeY_RBV','cam1:AndorADCSpeed_RBV','cam1:AndorPreAmpGain_RBV','cam1:ShutterStatus_RBV','cam1:AndorCooler','cam1:TemperatureActual']
+                pvlist = ['cam1:BI:NAME.DESC', 'cam1:AcquireTime_RBV',
+                        'cam1:AndorEMGain_RBV', 'cam1:AndorEMGainMode_RBV',
+                        'cam1:TriggerMode_RBV', 'cam1:ImageMode_RBV',
+                        'cam1:ArrayRate_RBV', 'cam1:DataType_RBV',
+                        'cam1:ArraySizeX_RBV', 'cam1:ArraySizeY_RBV',
+                        'cam1:AndorADCSpeed_RBV', 'cam1:AndorPreAmpGain_RBV',
+                        'cam1:ShutterStatus_RBV', 'cam1:AndorCooler',
+                        'cam1:TemperatureActual']
             else:
-                pvlist = ['cam1:BI:NAME.DESC','cam1:AcquireTime_RBV','cam1:Gain_RBV','cam1:TriggerMode_RBV','cam1:ArrayRate_RBV','cam1:DataType_RBV','cam1:ColorMode_RBV','cam1:ArraySizeX_RBV','cam1:ArraySizeY_RBV']
+                pvlist = ['cam1:BI:NAME.DESC', 'cam1:AcquireTime_RBV',
+                        'cam1:Gain_RBV', 'cam1:TriggerMode_RBV',
+                        'cam1:ArrayRate_RBV', 'cam1:DataType_RBV',
+                        'cam1:ColorMode_RBV', 'cam1:ArraySizeX_RBV',
+                        'cam1:ArraySizeY_RBV']
             for i in xrange(len(pvlist)):
                 pvlist[i] = cameraPvPrefix + ':' + pvlist[i]
-        filepath = self.filepath + 'images' + '-' + cameraPvPrefix + '/' # self.filepath is inherited from Experiment class
+        filepath = self.filepath + 'images' + '-' + cameraPvPrefix + '/' 
+                # self.filepath is inherited from Experiment class
         PV(pvPrefix + ':IMAGE:FILEPATH').put(filepath)  # Write filepath to PV for "Browse images" button
         grabFlag = PV(pvPrefix + ':GRABIMAGES:ENABLE').get()
         if not nImages: nImages = PV(pvPrefix + ':GRABIMAGES:N').get()
@@ -711,7 +753,8 @@ class ADGrabber(Experiment):
             self.capturePv.put(1, wait=True)
             # Build a list of filenames for (optional) tiff tag file naming
             if self.writeTiffTagsFlag:
-                imageFilepaths = [('%s%s%s_%04d%s' %(self.filepath,self.fileNamePrefix,self.filenameExtras,n+1,self.fileExt)) for n in range(nImages)]
+                imageFilepaths = ([('%s%s%s_%04d%s' %(self.filepath, self.fileNamePrefix, 
+                        self.filenameExtras, n+1, self.fileExt)) for n in range(nImages)])
             while self.captureRBVPv.get() or self.writingRBVPv.get():
                 sleep(0.1)
         else: # Individual mode (with timestamps)
@@ -728,7 +771,8 @@ class ADGrabber(Experiment):
                     imageFilepaths.append(self.lastImagePv.get(as_string=True))
         if grabImagesWriteSettingsFlag:
             # Write camera settings to file
-            settingsFile = self.filepath + 'cameraSettings-' + self.cameraPvPrefix + '-' + timestamp() + '.txt'
+            settingsFile = (self.filepath + 'cameraSettings-' + 
+                    self.cameraPvPrefix + '-' + timestamp() + '.txt')
             with open(settingsFile, 'w') as datafile:
                 datafile.write('Camera settings for ' + self.cameraPvPrefix + '\n')
                 datafile.write(timestamp() + '\n')
@@ -747,17 +791,21 @@ class ADGrabber(Experiment):
                         timestampTag = im.tag[65000][0]
                         timestampEpicsSecTag = im.tag[65002][0]
                         timestampEpicsNsecTag = im.tag[65003][0]
-                        timestampFromEpics = datetime.datetime.fromtimestamp(631152000+timestampEpicsSecTag+1e-9*timestampEpicsNsecTag).strftime('%Y%m%d_%H%M%S.%f')
+                        timestampFromEpics = (datetime.datetime.fromtimestamp(631152000 + 
+                                timestampEpicsSecTag + 
+                                1e-9*timestampEpicsNsecTag).strftime('%Y%m%d_%H%M%S.%f'))
                         filename = filepath.split('/')[-1]
-                        #filenameNew=filename.split('_')[0] + self.filenameExtras + '_' + str(timestampFromEpics) + '_' + str(timestampTag) + '_' + filename.split('_')[-1]
-                        filenameNew = self.fileNamePrefix + self.filenameExtras + '_' + str(timestampFromEpics) + '_' + str(timestampTag) + '_' + filename.split('_')[-1]
+                        filenameNew = (self.fileNamePrefix + self.filenameExtras + 
+                                '_' + str(timestampFromEpics) + '_' + str(timestampTag) + 
+                                '_' + filename.split('_')[-1])
                         os.rename(filepath, filepath.replace(filename, filenameNew))
                         print '%s --> %s' %(filename, filenameNew)
                     except IOError:
                         print 'writeTiffTags: IOError'
                     except NameError:
                         print 'writeTiffTags: PIL not installed'
-        printSleep(pause, string='Grabbed %d images from %s: Pausing' % (nImages, self.cameraPvPrefix))
+        printSleep(pause, string='Grabbed %d images from %s: Pausing' % 
+                  (nImages, self.cameraPvPrefix))
 
 
 def pvNDScan(exp, pv1, pv2, grabObject=None, shutter1=None, shutter2=None, shutter3=None):
@@ -767,29 +815,42 @@ def pvNDScan(exp, pv1, pv2, grabObject=None, shutter1=None, shutter2=None, shutt
         exp.scanmode = 1
     if 1 <= exp.scanmode <=2 and pv1.scanpv:
         initialPos1 = pv1.scanpv.get()
-        inc1 = (pv1.scanpv.stop-pv1.scanpv.start)/(pv1.scanpv.nsteps-1)
         if exp.scanmode == 2 and pv2.scanpv:
             initialPos2 = pv2.scanpv.get()
-            inc2 = (pv2.scanpv.stop-pv2.scanpv.start)/(pv2.scanpv.nsteps-1)
-        printMsg('Scanning %s from %f to %f in %d steps' % (pv1.scanpv.pvname,pv1.scanpv.start,pv1.scanpv.stop,pv1.scanpv.nsteps))
-        for i in range(pv1.scanpv.nsteps):
-            newPos1 = pv1.scanpv.start + i*inc1
-            printMsg('Setting %s to %f' % (pv1.scanpv.pvname,newPos1))
-            pv1.scanpv.move(newPos1)
+        # Do pre-scan if enabled from PV
+        if exp.preScanflag: preScan(exp, pv1, grabObject)
+        # Scan PV #1
+        printMsg('Scanning %s from %f to %f in %d steps' % 
+                (pv1.scanpv.pvname, pv1.scanpv.start, pv1.scanpv.stop, len(pv1.scanpv.scanPos)))
+        stepCount1 = 0
+        for x in pv1.scanpv.scanPos:
+            printMsg('Setting %s to %f' % (pv1.scanpv.pvname, x))
+            pv1.scanpv.move(x)
+            stepCount1 += 1
             printSleep(pv1.scanpv.settletime,'Settling')
+            # Scan PV #2
             if exp.scanmode == 2 and pv2.scanpv:
-                printMsg('Scanning %s from %f to %f in %d steps' % (pv2.scanpv.pvname,pv2.scanpv.start,pv2.scanpv.stop,pv2.scanpv.nsteps))
-                for j in range(pv2.scanpv.nsteps):
-                    newPos2 = pv2.scanpv.start + j*inc2
-                    printMsg('Setting %s to %f' % (pv2.scanpv.pvname,newPos2))
-                    pv2.scanpv.move(newPos2)
+                printMsg('Scanning %s from %f to %f in %d steps' % 
+                        (pv2.scanpv.pvname, pv2.scanpv.start, pv2.scanpv.stop, len(pv2.scanpv.scanPos)))
+                stepCount2 = 0
+                for y in pv2.scanpv.scanPos:
+                    printMsg('Setting %s to %f' % (pv2.scanpv.pvname, y))
+                    pv2.scanpv.move(y)
+                    stepCount2 += 1
                     printSleep(pv2.scanpv.settletime, 'Settling')
                     if grabObject:
                         if grabObject.grabber.grabFlag:
                             if grabObject.grabber.stepFlag:
-                                grabObject.grabber.filenameExtras = '_' + pv1.scanpv.desc + '-' + '{0:03d}'.format(i+1) + '-' + '{0:08.4f}'.format(pv1.scanpv.get()) + '_' + pv2.scanpv.desc + '-' + '{0:03d}'.format(j+1) + '-' + '{0:08.4f}'.format(pv2.scanpv.get())
+                                grabObject.grabber.filenameExtras = ('_' + pv1.scanpv.desc + 
+                                        '-' + '{0:03d}'.format(stepCount1) + '-' + 
+                                        '{0:08.4f}'.format(pv1.scanpv.get()) + '_' + 
+                                        pv2.scanpv.desc + '-' + '{0:03d}'.format(stepCount2) + 
+                                        '-' + '{0:08.4f}'.format(pv2.scanpv.get()))
                             else:
-                                grabObject.grabber.filenameExtras = '_' + pv1.scanpv.desc + '-' + '{0:08.4f}'.format(pv1.scanpv.get()) + '_' + pv2.scanpv.desc + '-' + '{0:08.4f}'.format(pv2.scanpv.get())
+                                grabObject.grabber.filenameExtras = ('_' + pv1.scanpv.desc + 
+                                        '-' + '{0:08.4f}'.format(pv1.scanpv.get()) + 
+                                        '_' + pv2.scanpv.desc + '-' + 
+                                        '{0:08.4f}'.format(pv2.scanpv.get()))
                             if grabObject.grabber.grabSeq2Flag:
                                 pumpedGrabSequence(grabObject, shutter1, shutter2, shutter3)
                             grabObject.grabber.grabImages()
@@ -797,9 +858,12 @@ def pvNDScan(exp, pv1, pv2, grabObject=None, shutter1=None, shutter2=None, shutt
                 if grabObject:
                     if grabObject.grabber.grabFlag:
                         if grabObject.grabber.stepFlag:
-                            grabObject.grabber.filenameExtras = '_' + pv1.scanpv.desc + '-' + '{0:03d}'.format(i+1) + '-' + '{0:08.4f}'.format(pv1.scanpv.get())
+                            grabObject.grabber.filenameExtras = ('_' + pv1.scanpv.desc + 
+                                    '-' + '{0:03d}'.format(stepCount1) + '-' + 
+                                    '{0:08.4f}'.format(pv1.scanpv.get()))
                         else:
-                            grabObject.grabber.filenameExtras = '_' + pv1.scanpv.desc + '-' + '{0:08.4f}'.format(pv1.scanpv.get())
+                            grabObject.grabber.filenameExtras = ('_' + pv1.scanpv.desc + 
+                                    '-' + '{0:08.4f}'.format(pv1.scanpv.get()))
                         if grabObject.grabber.grabSeq2Flag:
                             pumpedGrabSequence(grabObject, shutter1, shutter2, shutter3)
                         grabObject.grabber.grabImages()
@@ -828,13 +892,17 @@ def pumpedGrabSequence(grabObject, shutter1, shutter2, shutter3):
     shutter2Stat = shutter2.OCStatus.get()
     shutter3Stat = shutter3.OCStatus.get()
     #print shutter1Stat, shutter1.OCStatus.get()
-    if debug: print 'shutter stats: %s, %s, %s' % (shutter1.OCStatus.get(), shutter2.OCStatus.get(), shutter3.OCStatus.get())
+    if debug: 
+        print ('shutter stats: %s, %s, %s' 
+                % (shutter1.OCStatus.get(), shutter2.OCStatus.get(), shutter3.OCStatus.get()))
     printMsg('Opening shutters 1, 2 and 3')
     shutter1.open.put(1)
     shutter2.open.put(1)
     shutter3.open.put(1)
     sleep(0.25)
-    if debug: print 'shutter stats: %s, %s, %s' % (shutter1.OCStatus.get(), shutter2.OCStatus.get(), shutter3.OCStatus.get())
+    if debug: 
+        print ('shutter stats: %s, %s, %s'
+                % (shutter1.OCStatus.get(), shutter2.OCStatus.get(), shutter3.OCStatus.get()))
     if debug: print grabObject.grabber.filenameExtras
     if 'Static' in grabObject.grabber.filenameExtras:
         grabObject.grabber.filenameExtras = grabObject.grabber.filenameExtras.replace('Static', 'Pumped')
@@ -848,7 +916,9 @@ def pumpedGrabSequence(grabObject, shutter1, shutter2, shutter3):
     shutter3.open.put(1) if shutter3Stat == 1 else shutter3.close.put(0)
     sleep(0.25)
     #print shutter1Stat, shutter1.OCStatus.get()
-    if debug: print 'shutter stats: %s, %s, %s' % (shutter1.OCStatus.get(), shutter2.OCStatus.get(), shutter3.OCStatus.get())
+    if debug: 
+        print ('shutter stats: %s, %s, %s' 
+                % (shutter1.OCStatus.get(), shutter2.OCStatus.get(), shutter3.OCStatus.get()))
     if debug: print grabObject.grabber.filenameExtras
     if 'Pumped' in grabObject.grabber.filenameExtras:
         grabObject.grabber.filenameExtras = grabObject.grabber.filenameExtras.replace('Pumped', 'Static')
@@ -858,6 +928,29 @@ def pumpedGrabSequence(grabObject, shutter1, shutter2, shutter3):
     printMsg('Finished pumped image sequence')
     printSleep(grabObject.grabber.grabSeq2Delay)
 
+
+def preScan(exp, pv1, grabObject=None):
+    """Does pre-scan before main scan.  Pre-scan flag and scan parameters are set from PVs."""
+    #inc1 = (pv1.scanpv.pre_stop - pv1.scanpv.pre_start)/(pv1.scanpv.pre_nsteps - 1)
+    printMsg('Doing pre-scan ' + '-'*20) 
+    printMsg('Scanning %s from %f to %f in %d steps' % 
+            (pv1.scanpv.pvname, pv1.scanpv.pre_start, pv1.scanpv.pre_stop, pv1.scanpv.pre_nsteps))
+    for i in range(pv1.scanpv.pre_nsteps):
+        newPos1 = pv1.scanpv.pre_start + i*pv1.scanpv.inc
+        printMsg('Setting %s to %f' % (pv1.scanpv.pvname, newPos1))
+        pv1.scanpv.move(newPos1)
+        printSleep(pv1.scanpv.settletime,'Settling')
+        if grabObject:
+            if grabObject.grabber.grabFlag:
+                if grabObject.grabber.stepFlag:
+                    grabObject.grabber.filenameExtras = ('_prescan_' + pv1.scanpv.desc + 
+                            '-' + '{0:03d}'.format(i+1) + '-' + 
+                            '{0:08.4f}'.format(pv1.scanpv.get()))
+                else:
+                    grabObject.grabber.filenameExtras = ('_prescan_' + pv1.scanpv.desc + 
+                            '-' + '{0:08.4f}'.format(pv1.scanpv.get()))
+                grabObject.grabber.grabImages()
+    printMsg('Pre-scan done ' + '-'*20) 
 
 def printMsg(string, pv=msgPv):
     """Print message to stdout and to message PV."""
@@ -895,6 +988,36 @@ def printScanInfo(exp, pv1, pv2=None):
             print('PV #1 type: No PV entered')
             print('PV #2 type: %s' % (pv2.pvtypePv.get(as_string=True)))
     print '################################'
+
+
+def frange(start, stop, step):
+    """A range() for floats."""
+    i = start
+    while i <= stop:
+        yield i
+        i += step
+
+def expandRange(strng):
+    """Expands a matlab-style range string, e.g. 1:0.2:5, and generates a list of string values."""
+    start, step, stop = strng.split(':')
+    start = float(start)
+    stop = float(stop)
+    step = float(step)
+    lst = [str(x) for x in frange(start, stop, step)]
+    return lst
+
+def flattenList(lst):
+    """Flattens a nested list."""
+    return [x for sublist in lst for x in sublist]
+
+def isNumber(number):
+    """Tests whether number is a number."""
+    try:
+        float(number)
+        return True
+    except ValueError:
+        print '%s not a number.' % number
+        return False
 
 
 
