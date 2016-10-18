@@ -1,0 +1,3 @@
+[submodule "pvScanIOC"]
+	path = pvScanIOC
+	url = https://github.com/mpdunning/pvScanIOC
