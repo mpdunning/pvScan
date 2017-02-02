@@ -18,55 +18,44 @@ print 'Aborting...'
 
 # Import pvScan module
 sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/prod/modules/')
-import pvscan
+import pvscan3
 
 # Get PID PV
-pid=pvscan.pidPV.get()
+pid=pvscan3.pidPV.get()
 
 # For stopping the wrapper script
 runFlagPv=PV(pvPrefix + ':RUNFLAG')
 
-#--- Scan PVs ------------------------------------------
-# Create ScanPv objects, one for each PV you are scanning. 
-# First argument is the scan PV, leave as empty string to get from pvScan IOC. 
-# Second arg is an index which should be unique.
-scanPv1=pvscan.ScanPv('',1)
-scanPv2=pvscan.ScanPv('',2)
+exp = pvscan3.Experiment(2)
 
 #--- Shutters -----------------------------------------
-# Create Shutter objects. 
-# First argument is shutter PV.
-# Second arg (optional) is an RBV PV, for example an ADC channel.
-shutter1=pvscan.DummyShutter('ESB:GP01:VAL01','ESB:GP01:VAL01',1) # (Drive laser)
-shutter2=pvscan.DummyShutter('ESB:GP01:VAL02','ESB:GP01:VAL02',2) # (Pump laser)
-shutter3=pvscan.DummyShutter('ESB:GP01:VAL03','ESB:GP01:VAL03',3) # (Shutter 3)
+shutter1=pvscan3.DummyShutter('ESB:GP01:VAL01','ESB:GP01:VAL01',1) # (Drive laser)
+shutter2=pvscan3.DummyShutter('ESB:GP01:VAL02','ESB:GP01:VAL02',2) # (Pump laser)
+shutter3=pvscan3.DummyShutter('ESB:GP01:VAL03','ESB:GP01:VAL03',3) # (Shutter 3)
 #
-# Create ShutterGroup object to use common functions on all shutters.
-# Argument is a list of shutter objects.
-shutterGroup1=pvscan.ShutterGroup([shutter1,shutter2,shutter3])
+shutterGroup1=pvscan3.ShutterGroup([shutter1,shutter2,shutter3])
 
 ##################################################################################################################            
 def abortRoutine():
     "This is the abort routine"
     # Kill scan routine process
-    pvscan.printMsg('Killing process %d...' % (pid))
+    pvscan3.printMsg('Killing process %d...' % (pid))
     os.kill(pid, signal.SIGKILL)
     # Stop the wrapper script
-    pvscan.printMsg('Stopping wrapper script')
+    pvscan3.printMsg('Stopping wrapper script')
     runFlagPv.put(0)
     # Stop move(s)
-    pvscan.printMsg('Stopping move(s)')
-    if scanPv1.scanpv:
-        if scanPv1.scanpv.abort:
-            scanPv1.scanpv.abort.put(1)
-    if scanPv2.scanpv:
-        if scanPv2.scanpv.abort:
-            scanPv2.scanpv.abort.put(1)
+    pvscan3.printMsg('Stopping move(s)')
+    try:
+        exp.scanpvs[0].abort.put(1)
+        exp.scanpvs[1].abort.put(1)
+    except AttributeError:
+        'Warning: abortRoutine: AttributeError'
     #sleep(0.5)
     # Close shutters if enabled from PV
-    pvscan.printMsg('Closing shutters')
+    pvscan3.printMsg('Closing shutters')
     shutterGroup1.close(0)
-    pvscan.printMsg('Aborted')
+    pvscan3.printMsg('Aborted')
 
 
 if __name__ == "__main__":

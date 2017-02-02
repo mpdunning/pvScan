@@ -617,28 +617,26 @@ class DDGrabber(Experiment):
         self.dataFilenamePv.put(filenameTemplate + '\0')
         printMsg('Writing %s data for %d seconds...' % (self.cameraPvPrefix, self.dataTime))
         print 'DirectD filepath: ', filenameTemplate
-        #print self.dataStatusPv.get()
-        #print caget('UED:TST:FILEWRITER:STATUS')
         self.dataStartStopPv.put(1)
-        #caput('UED:TST:FILEWRITER:CMD',1)
         sleep(0.25)
         self.dataStartStopPv.put(1)
-        #caput('UED:TST:FILEWRITER:CMD',1)
         sleep(0.25)
         self.dataWriterStatus()
-        #print self.dataStatusPv.get()
-        #print caget('UED:TST:FILEWRITER:STATUS')
         sleep(self.dataTime)
         self.dataStartStopPv.put(0)
-        #caput('UED:TST:FILEWRITER:CMD',0)
         sleep(0.25)
         self.dataStartStopPv.put(0)
-        #caput('UED:TST:FILEWRITER:CMD',0)
         sleep(0.25)
         self.dataWriterStatus()
-        #print caget('UED:TST:FILEWRITER:STATUS')
-        #print self.dataStatusPv.get()
         printMsg('Done Writing %s data.' % (self.cameraPvPrefix))
+
+    def abort(self):
+        self.dataStartStopPv.put(0)
+        sleep(0.25)
+        self.dataStartStopPv.put(0)
+        sleep(0.25)
+        self.dataWriterStatus()
+        
 
 
                
@@ -806,6 +804,9 @@ class ADGrabber(Experiment):
                         print 'writeTiffTags: PIL not installed'
         printSleep(pause, string='Grabbed %d images from %s: Pausing' % 
                   (nImages, self.cameraPvPrefix))
+
+    def abort(self):
+        self.capturePv.put(0)
 
 
 def pvNDScan(exp, pv1, pv2, grabObject=None, shutter1=None, shutter2=None, shutter3=None):
