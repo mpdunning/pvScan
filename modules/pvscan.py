@@ -224,7 +224,7 @@ class BasePv(PV):
         as well as start:step:stop ranges."""
         lst = re.split(r'[;,\s]\s*', strng) 
         rangePat = re.compile(r'([-+]?\d*\.\d+|\d+):([-+]?\d*\.\d+|\d+):([-+]?\d*\.\d+|\d+)')
-        lst = [expandRange(x) if rangePat.match(x) else x for x in lst]
+        lst = [expandRange(rangePat.search(x).group(0)) if rangePat.search(x) else x for x in lst]
         lst = flattenList(lst)
         lst = [float(x) for x in lst if isNumber(x)]
         random.shuffle(lst)
