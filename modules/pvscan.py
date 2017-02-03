@@ -1008,8 +1008,14 @@ def expandRange(strng):
     return lst
 
 def flattenList(lst):
-    """Flattens a nested list."""
-    return [x for sublist in lst for x in sublist]
+    """Flattens a nested list. Does not flatten strings."""
+    for x in lst:
+        if hasattr(x, '__iter__') and not isinstance(x, basestring):
+            for y in flattenList(x):
+                yield y
+        else:
+            yield x
+
 
 def isNumber(number):
     """Tests whether number is a number."""
