@@ -20,28 +20,32 @@ msgPv.put('Initializing...')
 print 'Initializing...'
 
 # Import pvScan module
-sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/prod/modules/')
-import pvscan3
+sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/dev/modules/')
+import pvscan2
+pvscan2.loggingConfig()
 
 ### Set up scan #####################################################
 #--- Experiment ---------------------------------------
 print_lock = threading.Lock()
-exp = pvscan3.Experiment(2, mutex=print_lock)
+exp = pvscan2.Experiment(npvs=2, mutex=print_lock)
 #exp.grabber.dataStartStopPv = PV('ESB:GP01:VAL07')
 #exp.grabber.dataStatusPv = PV('ESB:GP01:VAL08')
 #exp.grabber.dataFilenamePv = PV('13PS7:TIFF1:FilePath')
 #-------------------------------------------------
 
-#grabber2 = pvscan3.ADGrabber('13PS7')
-#motor2 = pvscan3.Motor('ESB:XPS1:m6:MOTR')
-#pv2 = pvscan3.BasePv('13PS7:cam1:MaxSizeY_RBV')
+#grabber2 = pvscan2.ADGrabber('13PS7')
+#motor2 = pvscan2.Motor('ESB:XPS1:m6:MOTR')
+#pv2 = pvscan2.BasePv('13PS7:cam1:MaxSizeY_RBV')
 
 #--- Shutters -----------------------------------------
-shutter1 = pvscan3.DummyShutter('ESB:GP01:VAL01', 'ESB:GP01:VAL01', 1) # (Drive laser)
-shutter2 = pvscan3.DummyShutter('ESB:GP01:VAL02', 'ESB:GP01:VAL02', 2) # (Pump laser)
-shutter3 = pvscan3.DummyShutter('ESB:GP01:VAL03', 'ESB:GP01:VAL03', 3) # (Shutter 3)
+shutter1 = pvscan2.DummyShutter('ESB:GP01:VAL01', 'ESB:GP01:VAL01', 1) # (Drive laser)
+shutter2 = pvscan2.DummyShutter('ESB:GP01:VAL02', 'ESB:GP01:VAL02', 2) # (Pump laser)
+shutter3 = pvscan2.DummyShutter('ESB:GP01:VAL03', 'ESB:GP01:VAL03', 3) # (Shutter 3)
+# Save initial shutter states
+shutter1.initial.put(shutter1.OCStatus.get())
+shutter2.initial.put(shutter2.OCStatus.get())
 #
-shutterGroup1 = pvscan3.ShutterGroup([shutter1, shutter2, shutter3])  
+shutterGroup1 = pvscan2.ShutterGroup([shutter1, shutter2, shutter3])  
 #-------------------------------------------------
 
 #--- Data logging --------------------------
@@ -54,34 +58,34 @@ exp.dataLog.pvlist += shutterGroup1.rbv
 def scanRoutine():
     "This is the scan routine"
     # Print scan info
-    pvscan3.printScanInfo(exp, exp.scanpvs)
-    pvscan3.printMsg('Starting')
+    pvscan2.printScanInfo(exp, exp.scanpvs)
+    pvscan2.printMsg('Starting')
     sleep(0.5) # Collect some initial data first
     # Open all shutters, but only if enabled from PV.
-    shutterGroup1.open(1)
+    #shutterGroup1.open(1)
     #shutter1.openCheck()
     # Scan delay stage and grab images...
-    pvscan3.pvNDScan(exp, exp.scanpvs, exp.grabber, shutter1, shutter2, shutter3)
+    pvscan2.pvNDScan(exp, exp.scanpvs, exp.grabber, shutter1, shutter2, shutter3)
     #motor2.move(2.6)
     #print 'pv2 val:', pv2.get() 
     #if exp.scanmode: grabber2.grabImages(3)
     # Close all shutters, but only if enabled from PV.
-    shutterGroup1.close(0)
+    #shutterGroup1.close(0)
     #shutterGroup1.closeCheck()
 
 ### Main program ##########################################################3
 if __name__ == "__main__":
     "Do scan routine; log PV data to file as a separate thread if enabled"
     try:
-        args='PV_PREFIX'
+        args = 'PV_PREFIX'
         def show_usage():
             "Prints usage"
             print 'Usage: %s %s' %(sys.argv[0], args)
         if len(sys.argv) != 2:
             show_usage()
             sys.exit(1)
-        pid=os.getpid()
-        pvscan3.pidPV.put(pid)
+        pid = os.getpid()
+        pvscan2.pidPV.put(pid)
         if exp.dataLog.dataEnable:
             # Start logging data
             exp.dataLog.start()
@@ -90,11 +94,11 @@ if __name__ == "__main__":
     finally:
         # Stop logging data
         exp.dataLog.stop()
-        pvscan3.printMsg('Done')
+        pvscan2.printMsg('Done')
 
         
 ### End ##########################################################################
         
 
-exit
+sys.exit(0)
 

@@ -2,9 +2,12 @@
 # For aborting scans.  
 # mdunning 1/7/16
 
-from epics import PV
+import os
+import shutil
+import signal
+import sys
 from time import sleep
-import os,sys,signal
+from epics import PV
 
 # PV prefix for pvScan IOC; should be passed as an argument to this script.
 pvPrefix=sys.argv[1]
@@ -17,45 +20,48 @@ msgPv.put('Aborting...')
 print 'Aborting...'
 
 # Import pvScan module
-sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/prod/modules/')
-import pvscan3
+sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/dev/modules/')
+import pvscan
 
 # Get PID PV
-pid=pvscan3.pidPV.get()
+pid=pvscan.pidPV.get()
 
 # For stopping the wrapper script
 runFlagPv=PV(pvPrefix + ':RUNFLAG')
 
-exp = pvscan3.Experiment(2)
+exp = pvscan.Experiment(npvs=2, log=False, createDirs=False)
+#fp = exp.filepath
 
 #--- Shutters -----------------------------------------
-shutter1=pvscan3.DummyShutter('ESB:GP01:VAL01','ESB:GP01:VAL01',1) # (Drive laser)
-shutter2=pvscan3.DummyShutter('ESB:GP01:VAL02','ESB:GP01:VAL02',2) # (Pump laser)
-shutter3=pvscan3.DummyShutter('ESB:GP01:VAL03','ESB:GP01:VAL03',3) # (Shutter 3)
+shutter1=pvscan.DummyShutter('ESB:GP01:VAL01','ESB:GP01:VAL01',1) # (Drive laser)
+shutter2=pvscan.DummyShutter('ESB:GP01:VAL02','ESB:GP01:VAL02',2) # (Pump laser)
+shutter3=pvscan.DummyShutter('ESB:GP01:VAL03','ESB:GP01:VAL03',3) # (Shutter 3)
 #
-shutterGroup1=pvscan3.ShutterGroup([shutter1,shutter2,shutter3])
+shutterGroup1=pvscan.ShutterGroup([shutter1,shutter2,shutter3])
 
 ##################################################################################################################            
 def abortRoutine():
     "This is the abort routine"
     # Kill scan routine process
-    pvscan3.printMsg('Killing process %d...' % (pid))
+    pvscan.printMsg('Killing process %d...' % (pid))
     os.kill(pid, signal.SIGKILL)
     # Stop the wrapper script
-    pvscan3.printMsg('Stopping wrapper script')
+    pvscan.printMsg('Stopping wrapper script')
     runFlagPv.put(0)
     # Stop move(s)
-    pvscan3.printMsg('Stopping move(s)')
+    pvscan.printMsg('Stopping move(s)')
     try:
         exp.scanpvs[0].abort.put(1)
         exp.scanpvs[1].abort.put(1)
     except AttributeError:
         'Warning: abortRoutine: AttributeError'
-    #sleep(0.5)
-    # Close shutters if enabled from PV
-    pvscan3.printMsg('Closing shutters')
-    shutterGroup1.close(0)
-    pvscan3.printMsg('Aborted')
+    # Shutters
+    pvscan.printMsg('Returning shutters to initial state')
+    shutter1.open.put(1) if shutter1.initial.get() == 1 else shutter1.close.put(0)
+    shutter2.open.put(1) if shutter2.initial.get() == 1 else shutter2.close.put(0)
+    pvscan.printMsg('Aborting image grabbing')
+    exp.grabber.abort()
+    pvscan.printMsg('Aborted')
 
 
 if __name__ == "__main__":
