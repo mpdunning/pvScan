@@ -20,7 +20,7 @@ msgPv.put('Initializing...')
 print 'Initializing...'
 
 # Import pvScan module
-sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/dev/modules/')
+sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/prod/modules/')
 import pvscan2
 pvscan2.loggingConfig()
 
@@ -44,6 +44,7 @@ shutter3 = pvscan2.DummyShutter('ESB:GP01:VAL03', 'ESB:GP01:VAL03', 3) # (Shutte
 # Save initial shutter states
 shutter1.initial.put(shutter1.OCStatus.get())
 shutter2.initial.put(shutter2.OCStatus.get())
+shutter3.initial.put(shutter3.OCStatus.get())
 #
 shutterGroup1 = pvscan2.ShutterGroup([shutter1, shutter2, shutter3])  
 #-------------------------------------------------

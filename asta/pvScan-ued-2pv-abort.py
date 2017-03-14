@@ -19,7 +19,7 @@ msgPv.put('Aborting...')
 print 'Aborting...'
 
 # Import pvScan module
-sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/dev/modules/')
+sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/prod/modules/')
 import pvscan
 
 # Get PID PV
@@ -58,6 +58,7 @@ def abortRoutine():
     pvscan.printMsg('Returning shutters to initial state')
     shutter1.open.put(1) if shutter1.initial.get() == 1 else shutter1.close.put(0)
     shutter2.open.put(1) if shutter2.initial.get() == 1 else shutter2.close.put(0)
+    shutter3.open.put(1) if shutter3.initial.get() == 1 else shutter3.close.put(0)
     pvscan.printMsg('Aborting image grabbing')
     exp.grabber.abort()
     pvscan.printMsg('Aborted')

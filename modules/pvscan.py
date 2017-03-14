@@ -93,6 +93,7 @@ class Experiment:
         self.acqDelay1 = PV(pvPrefix + ':ACQ:DELAY1').get()
         self.acqDelay2 = PV(pvPrefix + ':ACQ:DELAY2').get()
         self.acqDelay3 = PV(pvPrefix + ':ACQ:DELAY3').get()
+        self.shutterCheck = PV(pvPrefix + ':SHUTTERS:CHECK').get()
         # Create objects needed in experiment
         if log: 
             self.logFile = Tee(filepath=self.filepath)
@@ -123,7 +124,11 @@ class Experiment:
                 msgPv.put('Failed: Filepath already exists')
                 raise IOError('Filepath already exists')
             else: 
-                os.makedirs(filepath)
+                try:
+                    os.makedirs(filepath)
+                except OSError as e:
+                    msgPv.put('Failed: %s: %s' % (e.strerror, e.filename))
+                    sys.exit(e.errno)
         return filepath
 
     def create_scan_pvs(self, npvs=None):
@@ -244,6 +249,7 @@ class BasePv(PV):
             self.pre_start = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':PRE_START').get()
             self.pre_stop = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':PRE_STOP').get()
             self.pre_nsteps = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':PRE_NSTEPS').get()
+            self.stepCountPv = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':STEPCOUNT')
         else:
             self.delta = None
         # Test for PV validity:
@@ -775,14 +781,18 @@ class ADGrabber():
         else:
             fileExt = '.img'
         self.imagePvPrefix = cameraPvPrefix + ':' + plugin
-        self.grabImagesRatePv = PV(pvPrefix + ':GRABIMAGES:RATE.INP')
-        self.grabImagesRatePv.put(cameraPvPrefix + ':' + plugin + ':ArrayRate_RBV CPP')
+        #self.grabImagesRatePv = PV(pvPrefix + ':GRABIMAGES:RATE.INP')
+        #self.grabImagesRatePv.put(self.imagePvPrefix + ':ArrayRate_RBV CPP')
         self.numCapturePv = PV(self.imagePvPrefix + ':NumCapture')
         self.templatePv = PV(self.imagePvPrefix + ':FileTemplate')
         self.capturePv = PV(self.imagePvPrefix + ':Capture')
         self.captureRBVPv = PV(self.imagePvPrefix + ':Capture_RBV.RVAL')
+        self.grabImagesCaptureRBVPv = PV(pvPrefix + ':GRABIMAGES:CAPTURE_RBV.INP')
+        self.grabImagesCaptureRBVPv.put(self.captureRBVPv.pvname + ' CPP')
         self.acquirePv = PV(cameraPvPrefix + ':cam1:Acquire')
         self.acquireRBVPv = PV(cameraPvPrefix + ':cam1:Acquire_RBV.RVAL')
+        #self.grabImagesAcquireRBVPv = PV(pvPrefix + ':GRABIMAGES:ACQUIRE_RBV.INP')
+        #self.grabImagesAcquireRBVPv.put(self.acquireRBVPv.pvname + ' CPP')
         self.imageModePv = PV(cameraPvPrefix + ':cam1:ImageMode')
         self.numExposuresPv = PV(cameraPvPrefix + ':cam1:NumExposures')
         self.arrayCounterPv = PV(cameraPvPrefix + ':cam1:ArrayCounter_RBV')
@@ -792,7 +802,7 @@ class ADGrabber():
         self.filePathPv = PV(self.imagePvPrefix + ':FilePath')
         self.fileNamePv = PV(self.imagePvPrefix + ':FileName')
         self.cameraPvPrefix = cameraPvPrefix
-        self.fileNamePrefix = self.cameraPvPrefix  # Make this user modifiable
+        self.fileNamePrefix = self.cameraPvPrefix  # To make this user modifiable
         self.pvlist = pvlist
         self.plugin = plugin
         self.filepath = filepath
@@ -1026,6 +1036,7 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutter1=None, shutter2=None, s
             printMsg('Setting %s to %f' % (pv1.pvname, x))
             pv1.move(x)
             stepCount1 += 1
+            pv1.stepCountPv.put(stepCount1)
             printSleep(pv1.settletime,'Settling')
             # Scan PV #2
             if exp.scanmode == 2 and pv2:
@@ -1039,6 +1050,7 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutter1=None, shutter2=None, s
                     printMsg('Setting %s to %f' % (pv2.pvname, y))
                     pv2.move(y)
                     stepCount2 += 1
+                    pv2.stepCountPv.put(stepCount2)
                     printSleep(pv2.settletime, 'Settling')
                     if grabObject:
                         if grabObject.grabFlag:
@@ -1054,22 +1066,22 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutter1=None, shutter2=None, s
                                 grabObject.grabImages()
                             else:
                                 if exp.acqPumpProbe:
-                                    acqPumpProbe(grabObject, shutter1, shutter2)
+                                    acqPumpProbe(exp, grabObject, shutter1, shutter3)
                                     if exp.acqDelay1 and (exp.acqStatic or exp.acqPumpBG or exp.acqDarkCurrent):
                                         #sleep(exp.acqDelay1)
                                         printSleep(exp.acqDelay1, 'Pausing')
                                 if exp.acqStatic:
-                                    acqStatic(grabObject, shutter1, shutter2)
+                                    acqStatic(exp, grabObject, shutter1, shutter3)
                                     if exp.acqDelay2 and (exp.acqPumpBG or exp.acqDarkCurrent):
                                         #sleep(exp.acqDelay2)
                                         printSleep(exp.acqDelay2, 'Pausing')
                                 if exp.acqPumpBG:
-                                    acqPumpBG(grabObject, shutter1, shutter2)    
+                                    acqPumpBG(exp, grabObject, shutter1, shutter3)    
                                     if exp.acqDelay3 and exp.acqDarkCurrent:
                                         #sleep(exp.acqDelay3)
                                         printSleep(exp.acqDelay3, 'Pausing')
                                 if exp.acqDarkCurrent:
-                                    acqDarkCurrent(grabObject, shutter1, shutter2)
+                                    acqDarkCurrent(exp, grabObject, shutter1, shutter3)
             else:
                 if grabObject:
                     if grabObject.grabFlag:
@@ -1084,22 +1096,22 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutter1=None, shutter2=None, s
                             grabObject.grabImages()
                         else:
                             if exp.acqPumpProbe:
-                                acqPumpProbe(grabObject, shutter1, shutter2)
+                                acqPumpProbe(exp, grabObject, shutter1, shutter3)
                                 if exp.acqDelay1 and (exp.acqStatic or exp.acqPumpBG or exp.acqDarkCurrent):
                                     #sleep(exp.acqDelay1)
                                     printSleep(exp.acqDelay1, 'Pausing')
                             if exp.acqStatic:
-                                acqStatic(grabObject, shutter1, shutter2)
+                                acqStatic(exp, grabObject, shutter1, shutter3)
                                 if exp.acqDelay2 and (exp.acqPumpBG or exp.acqDarkCurrent):
                                     #sleep(exp.acqDelay2)
                                     printSleep(exp.acqDelay2, 'Pausing')
                             if exp.acqPumpBG:
-                                acqPumpBG(grabObject, shutter1, shutter2)    
+                                acqPumpBG(exp, grabObject, shutter1, shutter3)    
                                 if exp.acqDelay3 and exp.acqDarkCurrent:
                                     #sleep(exp.acqDelay3)
                                     printSleep(exp.acqDelay3, 'Pausing')
                             if exp.acqDarkCurrent:
-                                acqDarkCurrent(grabObject, shutter1, shutter2)
+                                acqDarkCurrent(exp, grabObject, shutter1, shutter3)
         # Move back to initial positions
         printMsg('Setting %s back to initial position: %f' % (pv1.pvname,initialPos1))
         pv1.move(initialPos1)
@@ -1161,7 +1173,7 @@ def pumpedGrabSequence(grabObject, shutter1, shutter2, shutter3):
     printSleep(grabObject.grabSeq2Delay)
 
 
-def acqPumpProbe(grabObject, shutter1, shutter2, restoreShutters=True):
+def acqPumpProbe(exp, grabObject, shutter1, shutter2, restoreShutters=True):
     """Do a pump-probe image grab sequence: open both shutters, and return them to
     initial state when finished."""
     functionName = 'acqPumpProbe'
@@ -1170,12 +1182,14 @@ def acqPumpProbe(grabObject, shutter1, shutter2, restoreShutters=True):
         shutter1Stat = shutter1.OCStatus.get()
         shutter2Stat = shutter2.OCStatus.get()
     logging.debug('%s: shutter stats: %s, %s' % (functionName, shutter1.OCStatus.get(), shutter2.OCStatus.get()))
-    printMsg('Opening shutters 1 and 2')
+    printMsg('Opening shutters %s and %s' % (shutter1.number, shutter2.number))
     shutter1.open.put(1)
     shutter2.open.put(1)
     sleep(0.5)
-    shutter1.openCheck(val=0.5)
-    shutter2.openCheck(val=0.5)
+    if exp.shutterCheck:
+        logging.debug('%s: shutter check' % (functionName))
+        shutter1.openCheck(val=0.5)
+        shutter2.openCheck(val=0.5)
     logging.debug('%s: shutter stats: %s, %s' % (functionName, shutter1.OCStatus.get(), shutter2.OCStatus.get()))
     filenameExtras0 = grabObject.filenameExtras
     grabObject.filenameExtras = '_' + 'PumpProbe' + grabObject.filenameExtras
@@ -1190,7 +1204,7 @@ def acqPumpProbe(grabObject, shutter1, shutter2, restoreShutters=True):
     printMsg('Finished pump-probe acquisition')
 
 
-def acqStatic(grabObject, shutter1, shutter2, restoreShutters=True):
+def acqStatic(exp, grabObject, shutter1, shutter2, restoreShutters=True):
     """Do a static image grab sequence: open shutter1, close shutter 2, and return them to
     initial state when finished."""
     functionName = 'acqStatic'
@@ -1198,12 +1212,14 @@ def acqStatic(grabObject, shutter1, shutter2, restoreShutters=True):
     if restoreShutters:
         shutter1Stat = shutter1.OCStatus.get()
         shutter2Stat = shutter2.OCStatus.get()
-    printMsg('Opening shutter 1, closing shutter 2')
+    printMsg('Opening shutter %s, closing shutter %s' % (shutter1.number, shutter2.number))
     shutter1.open.put(1)
     shutter2.close.put(0)
     sleep(0.5)
-    shutter1.openCheck(val=0.5)
-    shutter2.closeCheck(val=0.5)
+    if exp.shutterCheck:
+        logging.debug('%s: shutter check' % (functionName))
+        shutter1.openCheck(val=0.5)
+        shutter2.closeCheck(val=0.5)
     logging.debug('%s: shutter stats: %s, %s' % (functionName, shutter1.OCStatus.get(), shutter2.OCStatus.get()))
     filenameExtras0 = grabObject.filenameExtras
     grabObject.filenameExtras = '_' + 'Static' + grabObject.filenameExtras
@@ -1217,7 +1233,7 @@ def acqStatic(grabObject, shutter1, shutter2, restoreShutters=True):
     grabObject.filenameExtras = filenameExtras0
     printMsg('Finished static acquisition')
 
-def acqPumpBG(grabObject, shutter1, shutter2, restoreShutters=True):
+def acqPumpBG(exp, grabObject, shutter1, shutter2, restoreShutters=True):
     """Do a pump-background image grab sequence: close shutter1, open shutter 2, and return them to
     initial state when finished."""
     functionName = 'acqPumpBG'
@@ -1226,12 +1242,14 @@ def acqPumpBG(grabObject, shutter1, shutter2, restoreShutters=True):
         shutter1Stat = shutter1.OCStatus.get()
         shutter2Stat = shutter2.OCStatus.get()
     logging.debug('%s: shutter stats: %s, %s' % (functionName, shutter1.OCStatus.get(), shutter2.OCStatus.get()))
-    printMsg('Closing shutter 1, opening shutter 2')
+    printMsg('Closing shutter %s, opening shutter %s' % (shutter1.number, shutter2.number))
     shutter1.close.put(0)
     shutter2.open.put(1)
     sleep(0.5)
-    shutter1.closeCheck(val=0.5)
-    shutter2.openCheck(val=0.5)
+    if exp.shutterCheck:
+        logging.debug('%s: shutter check' % (functionName))
+        shutter1.closeCheck(val=0.5)
+        shutter2.openCheck(val=0.5)
     logging.debug('%s: shutter stats: %s, %s' % (functionName, shutter1.OCStatus.get(), shutter2.OCStatus.get()))
     filenameExtras0 = grabObject.filenameExtras
     grabObject.filenameExtras = '_' + 'PumpBG' + grabObject.filenameExtras
@@ -1246,7 +1264,7 @@ def acqPumpBG(grabObject, shutter1, shutter2, restoreShutters=True):
     printMsg('Finished pump BG acquisition')
 
 
-def acqDarkCurrent(grabObject, shutter1, shutter2, restoreShutters=True):
+def acqDarkCurrent(exp, grabObject, shutter1, shutter2, restoreShutters=True):
     """Do a dark-current image grab sequence: close both shutters, and return them to
     initial state when finished."""
     functionName = 'acqDarkCurrent'
@@ -1259,8 +1277,10 @@ def acqDarkCurrent(grabObject, shutter1, shutter2, restoreShutters=True):
     shutter1.close.put(0)
     shutter2.close.put(0)
     sleep(0.5)
-    shutter1.closeCheck(val=0.5)
-    shutter2.closeCheck(val=0.5)
+    if exp.shutterCheck:
+        logging.debug('%s: shutter check' % (functionName))
+        shutter1.closeCheck(val=0.5)
+        shutter2.closeCheck(val=0.5)
     logging.debug('%s: shutter stats: %s, %s' % (functionName, shutter1.OCStatus.get(), shutter2.OCStatus.get()))
     filenameExtras0 = grabObject.filenameExtras
     grabObject.filenameExtras = '_' + 'DarkCurrent' + grabObject.filenameExtras

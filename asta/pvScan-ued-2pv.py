@@ -40,6 +40,7 @@ shutter3=pvscan.LSCShutter('ASTA:LSC03', 'ADC:AS01:15:V', 3)
 # Save initial shutter states
 shutter1.initial.put(shutter1.OCStatus.get())
 shutter2.initial.put(shutter2.OCStatus.get())
+shutter3.initial.put(shutter3.OCStatus.get())
 #
 shutterGroup1 = pvscan.ShutterGroup([shutter1, shutter2, shutter3])  
 #-------------------------------------------------
