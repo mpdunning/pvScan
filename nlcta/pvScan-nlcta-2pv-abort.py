@@ -21,48 +21,39 @@ print 'Aborting...'
 
 # Import pvScan module
 sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/dev/modules/')
-import pvscan
+import pvscan2
 
 # Get PID PV
-pid=pvscan.pidPV.get()
+pid=pvscan2.pidPV.get()
 
 # For stopping the wrapper script
 runFlagPv=PV(pvPrefix + ':RUNFLAG')
 
-exp = pvscan.Experiment(npvs=2, log=False, createDirs=False)
-#fp = exp.filepath
-
-#--- Shutters -----------------------------------------
-shutter1=pvscan.DummyShutter('ESB:GP01:VAL01','ESB:GP01:VAL01',1) # (Drive laser)
-shutter2=pvscan.DummyShutter('ESB:GP01:VAL02','ESB:GP01:VAL02',2) # (Pump laser)
-shutter3=pvscan.DummyShutter('ESB:GP01:VAL03','ESB:GP01:VAL03',3) # (Shutter 3)
-#
-shutterGroup1=pvscan.ShutterGroup([shutter1,shutter2,shutter3])
+exp = pvscan2.Experiment(npvs=2, nshutters=3, log=False, createDirs=False)
 
 ##################################################################################################################            
 def abortRoutine():
     "This is the abort routine"
     # Kill scan routine process
-    pvscan.printMsg('Killing process %d...' % (pid))
+    pvscan2.printMsg('Killing process %d...' % (pid))
     os.kill(pid, signal.SIGKILL)
     # Stop the wrapper script
-    pvscan.printMsg('Stopping wrapper script')
+    pvscan2.printMsg('Stopping wrapper script')
     runFlagPv.put(0)
     # Stop move(s)
-    pvscan.printMsg('Stopping move(s)')
+    pvscan2.printMsg('Stopping move(s)')
     try:
-        exp.scanpvs[0].abort.put(1)
-        exp.scanpvs[1].abort.put(1)
+        for pv in exp.scanpvs:
+            pv.abort.put(1)
     except AttributeError:
         'Warning: abortRoutine: AttributeError'
     # Shutters
-    pvscan.printMsg('Returning shutters to initial state')
-    shutter1.open.put(1) if shutter1.initial.get() == 1 else shutter1.close.put(0)
-    shutter2.open.put(1) if shutter2.initial.get() == 1 else shutter2.close.put(0)
-    shutter3.open.put(1) if shutter3.initial.get() == 1 else shutter3.close.put(0)
-    pvscan.printMsg('Aborting image grabbing')
+    pvscan2.printMsg('Returning shutters to initial state')
+    for shutter in exp.shutters:
+        shutter.open.put(1) if shutter.initial.get() == 1 else shutter.close.put(0)
+    pvscan2.printMsg('Aborting image grabbing')
     exp.grabber.abort()
-    pvscan.printMsg('Aborted')
+    pvscan2.printMsg('Aborted')
 
 
 if __name__ == "__main__":

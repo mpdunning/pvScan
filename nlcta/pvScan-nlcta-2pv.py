@@ -25,34 +25,10 @@ import pvscan2
 pvscan2.loggingConfig()
 
 ### Set up scan #####################################################
-#--- Experiment ---------------------------------------
-print_lock = threading.Lock()
-exp = pvscan2.Experiment(npvs=2, mutex=print_lock)
-#exp.grabber.dataStartStopPv = PV('ESB:GP01:VAL07')
-#exp.grabber.dataStatusPv = PV('ESB:GP01:VAL08')
-#exp.grabber.dataFilenamePv = PV('13PS7:TIFF1:FilePath')
-#-------------------------------------------------
+print_lock = threading.Lock()  # For thread-safe printing
 
-#grabber2 = pvscan2.ADGrabber('13PS7')
-#motor2 = pvscan2.Motor('ESB:XPS1:m6:MOTR')
-#pv2 = pvscan2.BasePv('13PS7:cam1:MaxSizeY_RBV')
-
-#--- Shutters -----------------------------------------
-shutter1 = pvscan2.DummyShutter('ESB:GP01:VAL01', 'ESB:GP01:VAL01', 1) # (Drive laser)
-shutter2 = pvscan2.DummyShutter('ESB:GP01:VAL02', 'ESB:GP01:VAL02', 2) # (Pump laser)
-shutter3 = pvscan2.DummyShutter('ESB:GP01:VAL03', 'ESB:GP01:VAL03', 3) # (Shutter 3)
-# Save initial shutter states
-shutter1.initial.put(shutter1.OCStatus.get())
-shutter2.initial.put(shutter2.OCStatus.get())
-shutter3.initial.put(shutter3.OCStatus.get())
-#
-shutterGroup1 = pvscan2.ShutterGroup([shutter1, shutter2, shutter3])  
-#-------------------------------------------------
-
-#--- Data logging --------------------------
-# Add shutter RBVs to PV monitor list
-#exp.dataLog.pvlist += shutterGroup1.rbv + [pv2]
-exp.dataLog.pvlist += shutterGroup1.rbv
+# Set up a scan with 2 Scan PVs, 3 shutters
+exp = pvscan2.Experiment(npvs=2, nshutters=3, mutex=print_lock)
 #-------------------------------------------------
 
 ### Define scan routine #####################################################
@@ -66,9 +42,7 @@ def scanRoutine():
     #shutterGroup1.open(1)
     #shutter1.openCheck()
     # Scan delay stage and grab images...
-    pvscan2.pvNDScan(exp, exp.scanpvs, exp.grabber, shutter1, shutter2, shutter3)
-    #motor2.move(2.6)
-    #print 'pv2 val:', pv2.get() 
+    pvscan2.pvNDScan(exp, exp.scanpvs, exp.grabber, exp.shutters)
     #if exp.scanmode: grabber2.grabImages(3)
     # Close all shutters, but only if enabled from PV.
     #shutterGroup1.close(0)
@@ -92,10 +66,10 @@ if __name__ == "__main__":
             exp.dataLog.start()
         scanRoutine()
         sleep(1) # Log data for a little longer
+        pvscan2.printMsg('Done')
     finally:
         # Stop logging data
         exp.dataLog.stop()
-        pvscan2.printMsg('Done')
 
         
 ### End ##########################################################################

@@ -22,33 +22,13 @@ print 'Initializing...'
 # Import pvScan module
 sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/prod/modules/')
 import pvscan
+pvscan.loggingConfig()
 
 ### Set up scan #####################################################
-#--- Experiment ---------------------------------------
-print_lock = threading.Lock()
-exp = pvscan.Experiment(npvs=2, mutex=print_lock)
-#-------------------------------------------------
+print_lock = threading.Lock()  # For thread-safe printing
 
-#grabber2 = pvscan.ADGrabber('13PS7')
-#motor2 = pvscan.Motor('ESB:XPS1:m6:MOTR')
-#pv2 = pvscan.BasePv('13PS7:cam1:MaxSizeY_RBV')
-
-#--- Shutters -----------------------------------------
-shutter1=pvscan.LSCShutter('ASTA:LSC01', 'ADC:AS01:13:V', 1)
-shutter2=pvscan.LSCShutter('ASTA:LSC02', 'ADC:AS01:14:V', 2)
-shutter3=pvscan.LSCShutter('ASTA:LSC03', 'ADC:AS01:15:V', 3)
-# Save initial shutter states
-shutter1.initial.put(shutter1.OCStatus.get())
-shutter2.initial.put(shutter2.OCStatus.get())
-shutter3.initial.put(shutter3.OCStatus.get())
-#
-shutterGroup1 = pvscan.ShutterGroup([shutter1, shutter2, shutter3])  
-#-------------------------------------------------
-
-#--- Data logging --------------------------
-# Add shutter RBVs to PV monitor list
-#exp.dataLog.pvlist += shutterGroup1.rbv + [pv2]
-exp.dataLog.pvlist += shutterGroup1.rbv
+# Set up a scan with 2 Scan PVs, 3 shutters
+exp = pvscan.Experiment(npvs=2, nshutters=3, mutex=print_lock)
 #-------------------------------------------------
 
 ### Define scan routine #####################################################
@@ -59,7 +39,7 @@ def scanRoutine():
     pvscan.printMsg('Starting')
     sleep(0.5) # Collect some initial data first
     # Scan delay stage and grab images...
-    pvscan.pvNDScan(exp, exp.scanpvs, exp.grabber, shutter1, shutter2, shutter3)
+    pvscan.pvNDScan(exp, exp.scanpvs, exp.grabber, exp.shutters)
 
 ### Main program ##########################################################3
 if __name__ == "__main__":
@@ -78,11 +58,11 @@ if __name__ == "__main__":
             # Start logging data
             exp.dataLog.start()
         scanRoutine()
-        sleep(1) # Log data for a little longer
+        sleep(0.5) # Log data for a little longer
+        pvscan.printMsg('Done')
     finally:
         # Stop logging data
         exp.dataLog.stop()
-        pvscan.printMsg('Done')
 
         
 ### End ##########################################################################

@@ -28,15 +28,7 @@ pid = pvscan.pidPV.get()
 # For stopping the wrapper script
 runFlagPv = PV(pvPrefix + ':RUNFLAG')
 
-exp = pvscan.Experiment(npvs=2, log=False, createDirs=False)
-#fp = exp.filepath
-
-#--- Shutters -----------------------------------------
-shutter1 = pvscan.LSCShutter('ASTA:LSC01', 'ADC:AS01:13:V', 1)
-shutter2 = pvscan.LSCShutter('ASTA:LSC02', 'ADC:AS01:14:V', 2)
-shutter3 = pvscan.LSCShutter('ASTA:LSC03', 'ADC:AS01:15:V', 3)
-#
-shutterGroup1=pvscan.ShutterGroup([shutter1,shutter2,shutter3])
+exp = pvscan.Experiment(npvs=2, nshutters=3, log=False, createDirs=False)
 
 ##################################################################################################################            
 def abortRoutine():
@@ -50,15 +42,14 @@ def abortRoutine():
     # Stop move(s)
     pvscan.printMsg('Stopping scan')
     try:
-        exp.scanpvs[0].abort.put(1)
-        exp.scanpvs[1].abort.put(1)
+        for pv in exp.scanpvs:
+            pv.abort.put(1)
     except AttributeError:
         'Warning: abortRoutine: AttributeError'
     # Shutters
     pvscan.printMsg('Returning shutters to initial state')
-    shutter1.open.put(1) if shutter1.initial.get() == 1 else shutter1.close.put(0)
-    shutter2.open.put(1) if shutter2.initial.get() == 1 else shutter2.close.put(0)
-    shutter3.open.put(1) if shutter3.initial.get() == 1 else shutter3.close.put(0)
+    for shutter in exp.shutters:
+        shutter.open.put(1) if shutter.initial.get() == 1 else shutter.close.put(0)
     pvscan.printMsg('Aborting image grabbing')
     exp.grabber.abort()
     pvscan.printMsg('Aborted')

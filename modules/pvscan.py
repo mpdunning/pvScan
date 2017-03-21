@@ -62,10 +62,11 @@ NOW = timestamp('s')
         
 class Experiment:
     """Set experiment name, filepath, and scan mode."""
-    def __init__(self, npvs=None, expname=None, filepath=None, scanname=None, mutex=None, log=True, createDirs=True):
-        className = self.__class__.__name__
+    def __init__(self, npvs=None, nshutters=None, expname=None, filepath=None, 
+            scanname=None, mutex=None, log=True, createDirs=True):
+        self.className = self.__class__.__name__
         functionName = '__init__'
-        logging.info('%s.%s' % (className, functionName))
+        logging.info('%s.%s' % (self.className, functionName))
         if expname is None:
             expname = PV(pvPrefix + ':IOC.DESC').get()
         if ' ' in expname: expname = expname.replace(' ', '_')
@@ -94,15 +95,17 @@ class Experiment:
         self.acqDelay2 = PV(pvPrefix + ':ACQ:DELAY2').get()
         self.acqDelay3 = PV(pvPrefix + ':ACQ:DELAY3').get()
         self.shutterCheck = PV(pvPrefix + ':SHUTTERS:CHECK').get()
+        self.shutterRestore = PV(pvPrefix + ':SHUTTERS:RESTORE').get()
         # Create objects needed in experiment
         if log: 
             self.logFile = Tee(filepath=self.filepath)
         self.create_scan_pvs(npvs)
+        self.create_shutters(nshutters)
         self.create_image_grabber()
         if log:
             self.dataLog = DataLogger(filepath=self.filepath, pvlist=self.imagepvs, 
-                                  scanpvs=self.scanpvs, mutex=self.mutex)
-        logging.debug('%s.%s: scanmode: %s' % (className, functionName, self.scanmode))
+                                  scanpvs=self.scanpvs, shutters=self.shutters, mutex=self.mutex)
+        logging.debug('%s.%s: scanmode: %s' % (self.className, functionName, self.scanmode))
 
     def _set_filepath(self, filepath):
         """Create filepath."""
@@ -133,6 +136,7 @@ class Experiment:
 
     def create_scan_pvs(self, npvs=None):
         """Create scan PV instances."""
+        functionName = 'create_scan_pvs'
         if npvs is not None:
             scanpvs = []
             for i in range(npvs):
@@ -142,7 +146,7 @@ class Experiment:
                 else:  # No PV entered
                     continue
                 if pvstatus is None: 
-                    print 'Error: _create_scan_pvs: Invalid PV', pvname
+                    logging.error('%s: %s: Invalid PV: %s' % (self.className, functionName, pvname))
                     continue
                 pvtype = PV(pvPrefix + ':SCANPV' + str(i+1) + ':PVTYPE').get(as_string=False)
                 # Create PV instance
@@ -163,6 +167,56 @@ class Experiment:
         else:
             scanpvs = None
         self.scanpvs = scanpvs
+
+    def create_shutters(self, nshutters=None):
+        """Create shutter instances."""
+        functionName = 'create_shutters'
+        if nshutters is not None:
+            shutters = []
+            for i in range(nshutters):
+                pvname = PV(pvPrefix + ':SHUTTER' + str(i+1) + ':PVNAME').get()
+                if pvname:
+                    pvstatus = PV(pvname).status
+                else:  # No PV entered
+                    continue
+                if pvstatus is None: 
+                    logging.error('%s: %s: Invalid PV: %s' % (self.className, functionName, pvname))
+                    continue
+                shuttertype = PV(pvPrefix + ':SHUTTER' + str(i+1) + ':TYPE').get(as_string=False)
+                rbv = PV(pvPrefix + ':SHUTTER' + str(i+1) + ':RBV').get()
+                # Create shutter instance
+                if shuttertype == 1:
+                    shutters.append(DummyShutter(pvname, rbv, i+1))
+                elif shuttertype == 2:
+                    shutters.append(LSCShutter(pvname, rbv, i+1))
+                elif shuttertype == 3:
+                    shutters.append(ThorSCShutter(pvname, rbv, i+1))
+                else:
+                    logging.warning('%s: shutter type: %s' % (functionName, shuttertype))
+        else:
+            shutters = None
+        logging.debug('%s: %s: shutters: %s' % (self.className, functionName, shutters))
+        # Get initial states of shutters
+        if shutters:
+            [shutter.initial.put(shutter.OCStatus.get()) for shutter in shutters]
+            for shutter in shutters:
+                logging.debug('%s: %s: shutter %s inital state: %s' 
+                        % (self.className, functionName, shutter.number, shutter.initial.get()))
+        # Do some checking, for acquisition modes that need shutters
+        if not self.acqFixed:
+            if len(shutters) < 2 and (self.acqPumpProbe or self.acqStatic 
+                    or self.acqPumpBG or self.acqDarkCurrent):
+                msg = ('Shutter Error: Need at least two shutters enabled')
+                msgPv.put(msg)
+                raise ShutterError(msg)
+            if self.shutterCheck:
+                for shutter in shutters:
+                    if shutter.shuttertype and (not shutter.rbv or shutter.rbv.get() is None):
+                        msg = ('Shutter Error: Verify shutters enabled, but shutter '
+                                + '%s has invalid RBV' % (shutter.number))
+                        msgPv.put(msg)
+                        raise ShutterError(msg)
+        self.shutters = shutters
 
     def create_image_grabber(self, cameraPvPrefix=None):
         """Create image grabber instance."""
@@ -431,27 +485,51 @@ class Shutter(PV):
     """Shutter class which inherits from pyEpics PV class."""
     def __init__(self, pvname, rbvpv=None, number=0):
         PV.__init__(self, pvname)
-        self.rbv = PV(rbvpv) if rbvpv else ''
+        self.rbv = PV(rbvpv) if rbvpv else None
         if number:
+            self.shuttertype = PV(pvPrefix + ':SHUTTER' + str(number) + ':TYPE').get(as_string=False)
             self.enabled = PV(pvPrefix + ':SHUTTER' + str(number) + ':ENABLE').get()
             self.initial = PV(pvPrefix + ':SHUTTER' + str(number) + ':INITIAL')
         self.number = number
+    
     def openCheck(self, val=0.5):
         sleep(0.2)
-        if self.rbv.get() < val:
-            printMsg('Failed: Shutter %s check' % (self.number))
-            print 'Shutter: %s Value: %f' % (self.pvname, self.rbv.get())
-            raise ValueError('Failed: Shutter check')
+        if self.rbv is None or self.rbv.get() is None:
+            msg = 'Failed shutter check: shutter %s RBV invalid' % (self.number)
+            printMsg(msg)
+            raise ShutterError(msg)
+        elif self.rbv.get() < val:
+            msg = 'Failed shutter check: shutter %s' % (self.number)
+            printMsg(msg)
+            raise ShutterError(msg)
+    
     def closeCheck(self, val=0.5):
         sleep(0.2)
+        if self.rbv is None or self.rbv.get() is None:
+            msg = 'Failed shutter check: shutter %s RBV invalid' % (self.number)
+            printMsg(msg)
+            raise ShutterError(msg)
         if self.rbv.get() > val:
-            printMsg('Failed: Shutter %s check' % (self.number))
-            print 'Shutter: %s Value: %f' % (self.pvname, self.rbv.get())
-            raise ValueError('Failed: Shutter check')
+            msg = 'Failed shutter check: shutter %s' % (self.number)
+            printMsg(msg)
+            raise ShutterError(msg)
                 
 
+class DummyShutter(Shutter):
+    """Dummy shutter class. For testing only."""
+    def __init__(self, pvname, rbvpv=None, number=0):
+        Shutter.__init__(self, pvname, rbvpv, number)
+        self.OCStatus = PV(pvname)
+        self.ttlInEnable = PV(pvname)
+        self.ttlInDisable = PV(pvname)
+        self.open = PV(pvname)
+        self.close = PV(pvname)
+        self.soft = PV(pvname)
+        self.fast = PV(pvname)
+
+
 class LSCShutter(Shutter):
-    """Lambda SC shutter class which inherits from Shutter class."""
+    """Lambda SC shutter class."""
     def __init__(self, pvname, rbvpv=None, number=0):
         Shutter.__init__(self, pvname, rbvpv, number)
         self.OCStatus = PV(':'.join(pvname.split(':')[0:2]) + ':STATUS:OC')
@@ -463,17 +541,17 @@ class LSCShutter(Shutter):
         self.fast = PV(':'.join(pvname.split(':')[0:2]) + ':MODE:FAST')
 
 
-class DummyShutter(Shutter):
-    """Dummy shutter class which inherits from Shutter class. Use for testing only."""
+class ThorSCShutter(Shutter):
+    """Thorlabs SC shutter class."""
     def __init__(self, pvname, rbvpv=None, number=0):
         Shutter.__init__(self, pvname, rbvpv, number)
-        self.OCStatus = PV(pvname)
-        self.ttlInEnable = PV(pvname)
-        self.ttlInDisable = PV(pvname)
-        self.open = PV(pvname)
-        self.close = PV(pvname)
-        self.soft = PV(pvname)
-        self.fast = PV(pvname)
+        self.OCStatus = PV(':'.join(pvname.split(':')[0:2]) + ':SHUTTER:STATE_RBV')
+        self.ttlInEnable = PV(':'.join(pvname.split(':')[0:2]) + ':TRIG:IN_MODE')
+        self.ttlInDisable = PV(':'.join(pvname.split(':')[0:2]) + ':TRIG:IN_MODE')
+        self.open = PV(':'.join(pvname.split(':')[0:2]) + ':SHUTTER:OPEN')
+        self.close = PV(':'.join(pvname.split(':')[0:2]) + ':SHUTTER:CLOSE')
+        self.trigOutMode = PV(':'.join(pvname.split(':')[0:2]) + ':TRIG:OUT_MODE')
+        self.outputMode = PV(':'.join(pvname.split(':')[0:2]) + ':SHUTTER:OUT_MODE')
 
 
 class ShutterGroup:
@@ -540,7 +618,7 @@ class ShutterGroup:
 
 class DataLogger(Thread):
     """Set up pvlist and filepaths to write data and log files."""
-    def __init__(self, filepath=None, pvlist=None, scanpvs=None, mutex=None):
+    def __init__(self, filepath=None, pvlist=None, scanpvs=None, shutters=None, mutex=None):
         className = self.__class__.__name__
         functionName = '__init__'
         logging.info('%s.%s' % (className, functionName))
@@ -559,7 +637,11 @@ class DataLogger(Thread):
             with open(pvFile, 'r') as file:
                 pvlist2 = [line.strip() for line in file if not line.startswith('#')]
                 pvlist2 = [PV(line) for line in pvlist2 if line]
-            pvlist += pvlist2  # Add additional monitor PVs to existing PV list
+            # Add additional monitor PVs to existing PV list
+            pvlist += pvlist2
+        # Add shutter RBVs
+        if shutters is not None:
+            pvlist += [shutter.rbv for shutter in shutters if shutter.rbv]
         if pvlist is not None:
             pvlist = [pv for pv in pvlist if pv]  # Remove invalid PVs
             for pv in pvlist:
@@ -996,7 +1078,17 @@ class ADGrabber():
         self.capturePv.put(0)
 
 
-def pvNDScan(exp, scanpvs=None, grabObject=None, shutter1=None, shutter2=None, shutter3=None):
+class Error(Exception):
+    """Base class for exceptions in this module."""
+    pass
+
+
+class ShutterError(Error):
+    """Shutter error class."""
+    pass
+
+
+def pvNDScan(exp, scanpvs=None, grabObject=None, shutters=None):
     """Do 0-, 1-, or 2-D scan and grab images at each step (or do nothing and bail)."""
     functionName = 'pvNDScan'
     logging.debug('%s: %s' %(functionName, scanpvs))
@@ -1014,6 +1106,10 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutter1=None, shutter2=None, s
             pv2 = scanpvs[1]
         else:
             raise ValueError('pvNDScan: Need one or two PVs.')
+    if shutters is not None:
+        shutter1 = shutters[0] if len(shutters) >= 1 else None
+        shutter2 = shutters[1] if len(shutters) >= 2 else None
+        shutter3 = shutters[2] if len(shutters) >= 3 else None
     if 1 <= exp.scanmode <=2 and pv2 and not pv1:  # 1- or 2-D scan
         pv1 = pv2
         exp.scanmode = 1
@@ -1066,22 +1162,19 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutter1=None, shutter2=None, s
                                 grabObject.grabImages()
                             else:
                                 if exp.acqPumpProbe:
-                                    acqPumpProbe(exp, grabObject, shutter1, shutter3)
+                                    acqPumpProbe(exp, grabObject, shutter1, shutter2)
                                     if exp.acqDelay1 and (exp.acqStatic or exp.acqPumpBG or exp.acqDarkCurrent):
-                                        #sleep(exp.acqDelay1)
                                         printSleep(exp.acqDelay1, 'Pausing')
                                 if exp.acqStatic:
-                                    acqStatic(exp, grabObject, shutter1, shutter3)
+                                    acqStatic(exp, grabObject, shutter1, shutter2)
                                     if exp.acqDelay2 and (exp.acqPumpBG or exp.acqDarkCurrent):
-                                        #sleep(exp.acqDelay2)
                                         printSleep(exp.acqDelay2, 'Pausing')
                                 if exp.acqPumpBG:
-                                    acqPumpBG(exp, grabObject, shutter1, shutter3)    
+                                    acqPumpBG(exp, grabObject, shutter1, shutter2)    
                                     if exp.acqDelay3 and exp.acqDarkCurrent:
-                                        #sleep(exp.acqDelay3)
                                         printSleep(exp.acqDelay3, 'Pausing')
                                 if exp.acqDarkCurrent:
-                                    acqDarkCurrent(exp, grabObject, shutter1, shutter3)
+                                    acqDarkCurrent(exp, grabObject, shutter1, shutter2)
             else:
                 if grabObject:
                     if grabObject.grabFlag:
@@ -1096,22 +1189,19 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutter1=None, shutter2=None, s
                             grabObject.grabImages()
                         else:
                             if exp.acqPumpProbe:
-                                acqPumpProbe(exp, grabObject, shutter1, shutter3)
+                                acqPumpProbe(exp, grabObject, shutter1, shutter2)
                                 if exp.acqDelay1 and (exp.acqStatic or exp.acqPumpBG or exp.acqDarkCurrent):
-                                    #sleep(exp.acqDelay1)
                                     printSleep(exp.acqDelay1, 'Pausing')
                             if exp.acqStatic:
-                                acqStatic(exp, grabObject, shutter1, shutter3)
+                                acqStatic(exp, grabObject, shutter1, shutter2)
                                 if exp.acqDelay2 and (exp.acqPumpBG or exp.acqDarkCurrent):
-                                    #sleep(exp.acqDelay2)
                                     printSleep(exp.acqDelay2, 'Pausing')
                             if exp.acqPumpBG:
-                                acqPumpBG(exp, grabObject, shutter1, shutter3)    
+                                acqPumpBG(exp, grabObject, shutter1, shutter2)    
                                 if exp.acqDelay3 and exp.acqDarkCurrent:
-                                    #sleep(exp.acqDelay3)
                                     printSleep(exp.acqDelay3, 'Pausing')
                             if exp.acqDarkCurrent:
-                                acqDarkCurrent(exp, grabObject, shutter1, shutter3)
+                                acqDarkCurrent(exp, grabObject, shutter1, shutter2)
         # Move back to initial positions
         printMsg('Setting %s back to initial position: %f' % (pv1.pvname,initialPos1))
         pv1.move(initialPos1)
@@ -1173,12 +1263,12 @@ def pumpedGrabSequence(grabObject, shutter1, shutter2, shutter3):
     printSleep(grabObject.grabSeq2Delay)
 
 
-def acqPumpProbe(exp, grabObject, shutter1, shutter2, restoreShutters=True):
+def acqPumpProbe(exp, grabObject, shutter1, shutter2):
     """Do a pump-probe image grab sequence: open both shutters, and return them to
     initial state when finished."""
     functionName = 'acqPumpProbe'
     printMsg('Starting pump-probe acquisition')
-    if restoreShutters:
+    if exp.shutterRestore:
         shutter1Stat = shutter1.OCStatus.get()
         shutter2Stat = shutter2.OCStatus.get()
     logging.debug('%s: shutter stats: %s, %s' % (functionName, shutter1.OCStatus.get(), shutter2.OCStatus.get()))
@@ -1194,7 +1284,7 @@ def acqPumpProbe(exp, grabObject, shutter1, shutter2, restoreShutters=True):
     filenameExtras0 = grabObject.filenameExtras
     grabObject.filenameExtras = '_' + 'PumpProbe' + grabObject.filenameExtras
     grabObject.grabImages()    
-    if restoreShutters:
+    if exp.shutterRestore:
         printMsg('Returning shutters to initial state')
         shutter1.open.put(1) if shutter1Stat == 1 else shutter1.close.put(0)
         shutter2.open.put(1) if shutter2Stat == 1 else shutter2.close.put(0)
@@ -1204,12 +1294,12 @@ def acqPumpProbe(exp, grabObject, shutter1, shutter2, restoreShutters=True):
     printMsg('Finished pump-probe acquisition')
 
 
-def acqStatic(exp, grabObject, shutter1, shutter2, restoreShutters=True):
+def acqStatic(exp, grabObject, shutter1, shutter2):
     """Do a static image grab sequence: open shutter1, close shutter 2, and return them to
     initial state when finished."""
     functionName = 'acqStatic'
     printMsg('Starting static acquisition')
-    if restoreShutters:
+    if exp.shutterRestore:
         shutter1Stat = shutter1.OCStatus.get()
         shutter2Stat = shutter2.OCStatus.get()
     printMsg('Opening shutter %s, closing shutter %s' % (shutter1.number, shutter2.number))
@@ -1224,7 +1314,7 @@ def acqStatic(exp, grabObject, shutter1, shutter2, restoreShutters=True):
     filenameExtras0 = grabObject.filenameExtras
     grabObject.filenameExtras = '_' + 'Static' + grabObject.filenameExtras
     grabObject.grabImages()    
-    if restoreShutters:
+    if exp.shutterRestore:
         printMsg('Returning shutters to initial state')
         shutter1.open.put(1) if shutter1Stat == 1 else shutter1.close.put(0)
         shutter2.open.put(1) if shutter2Stat == 1 else shutter2.close.put(0)
@@ -1233,12 +1323,12 @@ def acqStatic(exp, grabObject, shutter1, shutter2, restoreShutters=True):
     grabObject.filenameExtras = filenameExtras0
     printMsg('Finished static acquisition')
 
-def acqPumpBG(exp, grabObject, shutter1, shutter2, restoreShutters=True):
+def acqPumpBG(exp, grabObject, shutter1, shutter2):
     """Do a pump-background image grab sequence: close shutter1, open shutter 2, and return them to
     initial state when finished."""
     functionName = 'acqPumpBG'
     printMsg('Starting pump BG acquisition')
-    if restoreShutters:
+    if exp.shutterRestore:
         shutter1Stat = shutter1.OCStatus.get()
         shutter2Stat = shutter2.OCStatus.get()
     logging.debug('%s: shutter stats: %s, %s' % (functionName, shutter1.OCStatus.get(), shutter2.OCStatus.get()))
@@ -1254,7 +1344,7 @@ def acqPumpBG(exp, grabObject, shutter1, shutter2, restoreShutters=True):
     filenameExtras0 = grabObject.filenameExtras
     grabObject.filenameExtras = '_' + 'PumpBG' + grabObject.filenameExtras
     grabObject.grabImages()    
-    if restoreShutters:
+    if exp.shutterRestore:
         printMsg('Returning shutters to initial state')
         shutter1.open.put(1) if shutter1Stat == 1 else shutter1.close.put(0)
         shutter2.open.put(1) if shutter2Stat == 1 else shutter2.close.put(0)
@@ -1264,12 +1354,12 @@ def acqPumpBG(exp, grabObject, shutter1, shutter2, restoreShutters=True):
     printMsg('Finished pump BG acquisition')
 
 
-def acqDarkCurrent(exp, grabObject, shutter1, shutter2, restoreShutters=True):
+def acqDarkCurrent(exp, grabObject, shutter1, shutter2):
     """Do a dark-current image grab sequence: close both shutters, and return them to
     initial state when finished."""
     functionName = 'acqDarkCurrent'
     printMsg('Starting dark current acquisition')
-    if restoreShutters:
+    if exp.shutterRestore:
         shutter1Stat = shutter1.OCStatus.get()
         shutter2Stat = shutter2.OCStatus.get()
     logging.debug('%s: shutter stats: %s, %s' % (functionName, shutter1.OCStatus.get(), shutter2.OCStatus.get()))
@@ -1285,7 +1375,7 @@ def acqDarkCurrent(exp, grabObject, shutter1, shutter2, restoreShutters=True):
     filenameExtras0 = grabObject.filenameExtras
     grabObject.filenameExtras = '_' + 'DarkCurrent' + grabObject.filenameExtras
     grabObject.grabImages()    
-    if restoreShutters:
+    if exp.shutterRestore:
         printMsg('Returning shutters to initial state')
         shutter1.open.put(1) if shutter1Stat == 1 else shutter1.close.put(0)
         shutter2.open.put(1) if shutter2Stat == 1 else shutter2.close.put(0)
