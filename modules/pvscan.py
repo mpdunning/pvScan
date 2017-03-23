@@ -294,9 +294,9 @@ class BasePv(PV):
             if self.randomScanflag:
                 randValStr = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':RAND_VALS').get(as_string=True)
                 self.scanPos = self._shuffleString(randValStr)
-                print self.scanPos
             else:
                 self.scanPos = [x for x in frange(self.start, self.stop, self.inc)]
+            logging.debug('%s.%s: scanPos: %s' % (className, functionName, self.scanPos))
             self.offset = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':OFFSET').get()
             self.settletime = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':SETTLETIME').get()
             self.delta = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':DELTA').get()
@@ -1459,9 +1459,16 @@ def printScanInfo(exp, scanpvs=None):
 def frange(start, stop, step=1.0):
     """A range() for floats."""
     x = float(start)
-    while x <= float(stop):
+    if stop > start:
+        while x <= float(stop):
+            yield x
+            x += float(step)
+    elif stop < start:
+        while x >= float(stop):
+            yield x
+            x += float(step)
+    else:
         yield x
-        x += float(step)
 
 def expandRange(strng):
     """Expands a matlab-style range string, e.g. 1:0.2:5, and generates a list of string values."""
