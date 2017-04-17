@@ -1020,7 +1020,8 @@ class ADGrabber():
         for i in range(self.nImages):
             # Set FileTemplate PV and then grab image
             imageFilenameTemplate = '%s%s_' + timestamp(1) + '_%4.4d' + self.fileExt
-            self.templatePv.put(imageFilenameTemplate + '\0')
+            self.templatePv.put(imageFilenameTemplate + '\0', wait=True)
+            sleep(0.002)  # This is to be sure the filename gets set
             self.capturePv.put(1, wait=True)
             # Build a list of filenames for (optional) tiff tag file naming
             if self.writeTiffTagsFlag:
