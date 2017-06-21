@@ -57,6 +57,8 @@ if n_runs > 1:
                 print '*'*15 + ' Run %03d ' % (i+1) + '*'*15
                 if filepath.endswith('/'):
                     filepath_new = filepath.rstrip('/')
+                else:
+                    filepath_new = filepath
                 filepath_new += '/run%03d' % (i+1)
                 filepath_pv.put(filepath_new + '\0')
                 sleep(0.5)

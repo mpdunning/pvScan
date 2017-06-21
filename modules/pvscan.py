@@ -7,6 +7,7 @@ import logging
 import os
 import random
 import re
+import subprocess
 import sys
 from time import sleep, time
 from threading import Thread, Lock
@@ -1149,6 +1150,7 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutters=None):
                     stepCount2 += 1
                     pv2.stepCountPv.put(stepCount2)
                     printSleep(pv2.settletime, 'Settling')
+                    runUserScript()
                     if grabObject:
                         if grabObject.grabFlag:
                             if grabObject.stepFlag:
@@ -1177,6 +1179,7 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutters=None):
                                 if exp.acqDarkCurrent:
                                     acqDarkCurrent(exp, grabObject, shutter1, shutter2)
             else:
+                runUserScript()
                 if grabObject:
                     if grabObject.grabFlag:
                         if grabObject.stepFlag:
@@ -1210,6 +1213,7 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutters=None):
             printMsg('Setting %s back to initial position: %f' % (pv2.pvname,initialPos2))
             pv2.move(initialPos2)
     elif exp.scanmode == 3:  # Grab images only
+        runUserScript()
         if grabObject:
             if grabObject.grabFlag:
                 if grabObject.grabSeq2Flag:
@@ -1408,6 +1412,26 @@ def preScan(exp, pv1, grabObject=None):
                             '-' + '{0:08.4f}'.format(pv1.get()))
                 grabObject.grabImages()
     printMsg('Pre-scan done ' + '-'*20) 
+
+
+def runUserScript():
+    runUserScriptFlag = PV(pvPrefix + ':RUNSCRIPT:ENABLE').get()
+    if runUserScriptFlag:
+        try:
+            runUserScriptPath = PV(pvPrefix + ':RUNSCRIPT:PATH').get(as_string=True)
+        except ValueError:
+            logging.error('runUserScript: path is zero length')
+            return(-1)
+        runUserScriptPath = runUserScriptPath.split()
+        #print runUserScriptPath
+        try:
+            subprocess.call(runUserScriptPath)
+        except OSError as e:
+            msg = 'Failed: %s: %s' % ('runUserScript', e.strerror)
+            logging.error(msg)
+            msgPv.put(msg)
+            sys.exit(e.errno)
+    
 
 def printMsg(string, pv=msgPv):
     """Print message to stdout and to message PV."""
