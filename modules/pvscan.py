@@ -11,7 +11,9 @@ import subprocess
 import sys
 from time import sleep, time
 from threading import Thread, Lock
+import numpy as np
 import matplotlib.pyplot as plt
+from scipy.interpolate import interp1d
 from epics import PV, ca, caget, caput
 try:
     from PIL import Image
@@ -296,7 +298,8 @@ class BasePv(PV):
                 randValStr = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':RAND_VALS').get(as_string=True)
                 self.scanPos = self._shuffleString(randValStr)
             else:
-                self.scanPos = [x for x in frange(self.start, self.stop, self.inc)]
+                #self.scanPos = [x for x in frange(self.start, self.stop, self.inc)]
+                self.scanPos = np.linspace(self.start, self.stop, num=self.nsteps)
             logging.debug('%s.%s: scanPos: %s' % (className, functionName, self.scanPos))
             self.offset = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':OFFSET').get()
             self.settletime = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':SETTLETIME').get()
@@ -1129,12 +1132,13 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutters=None):
         else:
             printMsg('Scanning %s from %f to %f in %d steps' % 
                     (pv1.pvname, pv1.start, pv1.stop, len(pv1.scanPos)))
-        stepCount1 = 0
+        stepCount1 = 1
         for x in pv1.scanPos:
             printMsg('Setting %s to %f' % (pv1.pvname, x))
             pv1.move(x)
-            stepCount1 += 1
+            scanCorrection(x)
             pv1.stepCountPv.put(stepCount1)
+            stepCount1 += 1
             printSleep(pv1.settletime,'Settling')
             # Scan PV #2
             if exp.scanmode == 2 and pv2:
@@ -1143,12 +1147,12 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutters=None):
                 else:
                     printMsg('Scanning %s from %f to %f in %d steps' % 
                             (pv2.pvname, pv2.start, pv2.stop, len(pv2.scanPos)))
-                stepCount2 = 0
+                stepCount2 = 1
                 for y in pv2.scanPos:
                     printMsg('Setting %s to %f' % (pv2.pvname, y))
                     pv2.move(y)
-                    stepCount2 += 1
                     pv2.stepCountPv.put(stepCount2)
+                    stepCount2 += 1
                     printSleep(pv2.settletime, 'Settling')
                     runUserScript()
                     if grabObject:
@@ -1415,6 +1419,7 @@ def preScan(exp, pv1, grabObject=None):
 
 
 def runUserScript():
+    """Run arbitrary script after image grabbing."""
     runUserScriptFlag = PV(pvPrefix + ':RUNSCRIPT:ENABLE').get()
     if runUserScriptFlag:
         try:
@@ -1424,6 +1429,7 @@ def runUserScript():
             return(-1)
         runUserScriptPath = runUserScriptPath.split()
         #print runUserScriptPath
+        printMsg('Running user script...')
         try:
             subprocess.call(runUserScriptPath)
         except OSError as e:
@@ -1431,6 +1437,39 @@ def runUserScript():
             logging.error(msg)
             msgPv.put(msg)
             sys.exit(e.errno)
+    
+
+def scanCorrection(pvValue):
+    """Do a 2-D correction, based on a PV value.  
+           Get correction PV names and a correction data filepath from PV."""
+    scanCorFlag = PV(pvPrefix + ':SCANCOR:ENABLE').get()
+    if scanCorFlag:
+        try:
+            scanCorPath = PV(pvPrefix + ':SCANCOR:PATH').get(as_string=True)
+            scanCorFitType = PV(pvPrefix + ':SCANCOR:FITTYPE').get()
+            scanCorPvname1 = PV(pvPrefix + ':SCANCOR:PVNAME1').get(as_string=True)
+            scanCorPvname2 = PV(pvPrefix + ':SCANCOR:PVNAME2').get(as_string=True)
+            scanCorPv1 = PV(scanCorPvname1)
+            scanCorPv2 = PV(scanCorPvname2)
+            scanCorPvscale1 = PV(pvPrefix + ':SCANCOR:PVSCALE1').get()
+            scanCorPvscale2 = PV(pvPrefix + ':SCANCOR:PVSCALE2').get()
+        except ValueError:
+            logging.error('scanCorrection: path is zero length')
+            return(-1)
+        with open(scanCorPath, 'r') as fh:
+            scanCorData = [line.strip() for line in fh if not line.startswith('#')]
+            scanCorData = [line.split() for line in scanCorData if line]
+        vals = np.asarray([x[0] for x in scanCorData], dtype=np.float32)
+        cor1 = np.asarray([x[1] for x in scanCorData], dtype=np.float32)
+        cor2 = np.asarray([x[2] for x in scanCorData], dtype=np.float32)
+        interpData1 = interp1d(vals, cor1, kind=scanCorFitType)
+        interpData2 = interp1d(vals, cor2, kind=scanCorFitType)
+        cor1 = scanCorPvscale1*float(interpData1(pvValue))
+        cor2 = scanCorPvscale2*float(interpData2(pvValue))
+        printMsg('Setting %s to %f' % (scanCorPv1.pvname, cor1))
+        scanCorPv1.put(cor1)
+        printMsg('Setting %s to %f' % (scanCorPv2.pvname, cor2))
+        scanCorPv2.put(cor2)
     
 
 def printMsg(string, pv=msgPv):
