@@ -99,6 +99,8 @@ class Experiment:
         self.acqDelay3 = PV(pvPrefix + ':ACQ:DELAY3').get()
         self.shutterCheck = PV(pvPrefix + ':SHUTTERS:CHECK').get()
         self.shutterRestore = PV(pvPrefix + ':SHUTTERS:RESTORE').get()
+        self.runUserScriptFlag = PV(pvPrefix + ':RUNSCRIPT:ENABLE').get()
+        self.scanCorFlag = PV(pvPrefix + ':SCANCOR:ENABLE').get()
         # Create objects needed in experiment
         if log: 
             self.logFile = Tee(filepath=self.filepath)
@@ -1119,6 +1121,9 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutters=None):
         pv1 = pv2
         exp.scanmode = 1
     if 1 <= exp.scanmode <=2 and pv1:
+        if exp.scanCorFlag:
+            scanCorr1 = ScanCorrection()
+            scanCorr1.plot()
         initialPos1 = pv1.get()
         if exp.scanmode == 2 and pv2:
             initialPos2 = pv2.get()
@@ -1136,7 +1141,8 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutters=None):
         for x in pv1.scanPos:
             printMsg('Setting %s to %f' % (pv1.pvname, x))
             pv1.move(x)
-            scanCorrection(x)
+            if exp.scanCorFlag:
+                scanCorr1.set(x)
             pv1.stepCountPv.put(stepCount1)
             stepCount1 += 1
             printSleep(pv1.settletime,'Settling')
@@ -1154,7 +1160,8 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutters=None):
                     pv2.stepCountPv.put(stepCount2)
                     stepCount2 += 1
                     printSleep(pv2.settletime, 'Settling')
-                    runUserScript()
+                    if exp.runUserScriptFlag:
+                        runUserScript()
                     if grabObject:
                         if grabObject.grabFlag:
                             if grabObject.stepFlag:
@@ -1183,7 +1190,8 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutters=None):
                                 if exp.acqDarkCurrent:
                                     acqDarkCurrent(exp, grabObject, shutter1, shutter2)
             else:
-                runUserScript()
+                if exp.runUserScriptFlag:
+                    runUserScript()
                 if grabObject:
                     if grabObject.grabFlag:
                         if grabObject.stepFlag:
@@ -1211,13 +1219,16 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutters=None):
                             if exp.acqDarkCurrent:
                                 acqDarkCurrent(exp, grabObject, shutter1, shutter2)
         # Move back to initial positions
-        printMsg('Setting %s back to initial position: %f' % (pv1.pvname,initialPos1))
+        printMsg('Setting %s back to initial position: %f' % (pv1.pvname, initialPos1))
         pv1.move(initialPos1)
+        if exp.scanCorFlag:
+            scanCorr1.reset()
         if exp.scanmode == 2 and pv2:
-            printMsg('Setting %s back to initial position: %f' % (pv2.pvname,initialPos2))
+            printMsg('Setting %s back to initial position: %f' % (pv2.pvname, initialPos2))
             pv2.move(initialPos2)
     elif exp.scanmode == 3:  # Grab images only
-        runUserScript()
+        if exp.runUserScriptFlag:
+            runUserScript()
         if grabObject:
             if grabObject.grabFlag:
                 if grabObject.grabSeq2Flag:
@@ -1420,57 +1431,92 @@ def preScan(exp, pv1, grabObject=None):
 
 def runUserScript():
     """Run arbitrary script after image grabbing."""
-    runUserScriptFlag = PV(pvPrefix + ':RUNSCRIPT:ENABLE').get()
-    if runUserScriptFlag:
-        try:
-            runUserScriptPath = PV(pvPrefix + ':RUNSCRIPT:PATH').get(as_string=True)
-        except ValueError:
-            logging.error('runUserScript: path is zero length')
-            return(-1)
-        runUserScriptPath = runUserScriptPath.split()
-        #print runUserScriptPath
-        printMsg('Running user script...')
-        try:
-            subprocess.call(runUserScriptPath)
-        except OSError as e:
-            msg = 'Failed: %s: %s' % ('runUserScript', e.strerror)
-            logging.error(msg)
-            msgPv.put(msg)
-            sys.exit(e.errno)
+    #runUserScriptFlag = PV(pvPrefix + ':RUNSCRIPT:ENABLE').get()
+    #if runUserScriptFlag:
+    try:
+        runUserScriptPath = PV(pvPrefix + ':RUNSCRIPT:PATH').get(as_string=True)
+    except ValueError:
+        logging.error('runUserScript: path is zero length')
+        return(-1)
+    runUserScriptPath = runUserScriptPath.split()
+    #print runUserScriptPath
+    printMsg('Running user script...')
+    try:
+        subprocess.call(runUserScriptPath)
+    except OSError as e:
+        msg = 'Failed: %s: %s' % ('runUserScript', e.strerror)
+        logging.error(msg)
+        msgPv.put(msg)
+        sys.exit(e.errno)
     
-
-def scanCorrection(pvValue):
+class ScanCorrection():
     """Do a 2-D correction, based on a PV value.  
            Get correction PV names and a correction data filepath from PV."""
-    scanCorFlag = PV(pvPrefix + ':SCANCOR:ENABLE').get()
-    if scanCorFlag:
+    def __init__(self):
+        self.className = self.__class__.__name__
+        functionName = '__init__'
+        logging.info('%s.%s' % (self.className, functionName))
+        scanCorPvname1 = PV(pvPrefix + ':SCANCOR:PVNAME1').get(as_string=True)
+        scanCorPvname2 = PV(pvPrefix + ':SCANCOR:PVNAME2').get(as_string=True)
+        self.scanCorPv1 = PV(scanCorPvname1)
+        self.scanCorPv2 = PV(scanCorPvname2)
+        sleep(0.2)
+        self.initVal1 = self.scanCorPv1.get()
+        self.initVal2 = self.scanCorPv2.get()
+        self._fitData()
+
+    def _fitData(self):
+        """Fit data from file.  Result is two fit functions, one for each axis."""
+        functionName = '_fitData'
         try:
             scanCorPath = PV(pvPrefix + ':SCANCOR:PATH').get(as_string=True)
-            scanCorFitType = PV(pvPrefix + ':SCANCOR:FITTYPE').get()
-            scanCorPvname1 = PV(pvPrefix + ':SCANCOR:PVNAME1').get(as_string=True)
-            scanCorPvname2 = PV(pvPrefix + ':SCANCOR:PVNAME2').get(as_string=True)
-            scanCorPv1 = PV(scanCorPvname1)
-            scanCorPv2 = PV(scanCorPvname2)
-            scanCorPvscale1 = PV(pvPrefix + ':SCANCOR:PVSCALE1').get()
-            scanCorPvscale2 = PV(pvPrefix + ':SCANCOR:PVSCALE2').get()
         except ValueError:
-            logging.error('scanCorrection: path is zero length')
+            logging.error('%s:%s: path is zero length' % (self.className, functionName))
             return(-1)
+        scanCorFitType = PV(pvPrefix + ':SCANCOR:FITTYPE').get()
         with open(scanCorPath, 'r') as fh:
             scanCorData = [line.strip() for line in fh if not line.startswith('#')]
             scanCorData = [line.split() for line in scanCorData if line]
-        vals = np.asarray([x[0] for x in scanCorData], dtype=np.float32)
-        cor1 = np.asarray([x[1] for x in scanCorData], dtype=np.float32)
-        cor2 = np.asarray([x[2] for x in scanCorData], dtype=np.float32)
-        interpData1 = interp1d(vals, cor1, kind=scanCorFitType)
-        interpData2 = interp1d(vals, cor2, kind=scanCorFitType)
-        cor1 = scanCorPvscale1*float(interpData1(pvValue))
-        cor2 = scanCorPvscale2*float(interpData2(pvValue))
-        printMsg('Setting %s to %f' % (scanCorPv1.pvname, cor1))
-        scanCorPv1.put(cor1)
-        printMsg('Setting %s to %f' % (scanCorPv2.pvname, cor2))
-        scanCorPv2.put(cor2)
+        self.vals = np.asarray([x[0] for x in scanCorData], dtype=np.float32)
+        self.cor1 = np.asarray([x[1] for x in scanCorData], dtype=np.float32)
+        self.cor2 = np.asarray([x[2] for x in scanCorData], dtype=np.float32)
+        self.fitFunc1 = interp1d(self.vals, self.cor1, kind=scanCorFitType)
+        self.fitFunc2 = interp1d(self.vals, self.cor2, kind=scanCorFitType)
+
+    def plot(self):    
+        """Plot fits."""
+        scanCorShowPlot = PV(pvPrefix + ':SCANCOR:SHOWPLOT').get()
+        sleep(0.1)
+        if scanCorShowPlot:
+            t = np.linspace(min(self.vals), max(self.vals), num=100, endpoint=True)
+            plt.plot(self.vals, self.cor1, 'o', t, self.fitFunc1(t), '-', self.vals, 
+                    self.cor2, '+', t, self.fitFunc2(t), '--')
+            plt.legend(['xdata', 'x', 'ydata', 'y'], loc='best')
+            plt.show()
+
+    def set(self, scanPvValue):
+        """Set correction PVs using fit functions, based on the value of the PV being scanned."""
+        scanCorPvscale1 = PV(pvPrefix + ':SCANCOR:PVSCALE1').get()
+        scanCorPvscale2 = PV(pvPrefix + ':SCANCOR:PVSCALE2').get()
+        scanCorCorrType = PV(pvPrefix + ':SCANCOR:CORRTYPE').get()
+        if scanCorCorrType:
+            corVal1 = scanCorPvscale1*float(self.fitFunc1(scanPvValue))
+            corVal2 = scanCorPvscale2*float(self.fitFunc2(scanPvValue))
+        else:
+            corVal1 = self.initVal1 + scanCorPvscale1*float(self.fitFunc1(scanPvValue))
+            corVal2 = self.initVal2 + scanCorPvscale2*float(self.fitFunc2(scanPvValue))
+        printMsg('Setting %s to %f' % (self.scanCorPv1.pvname, corVal1))
+        self.scanCorPv1.put(corVal1)
+        printMsg('Setting %s to %f' % (self.scanCorPv2.pvname, corVal2))
+        self.scanCorPv2.put(corVal2)
     
+    def reset(self):
+        """Reset correction PVs to initial value."""
+        printMsg('Resetting %s back to %f' % (self.scanCorPv1.pvname, self.initVal1))
+        self.scanCorPv1.put(self.initVal1)
+        printMsg('Resetting %s back to %f' % (self.scanCorPv2.pvname, self.initVal2))
+        self.scanCorPv2.put(self.initVal2)
+
 
 def printMsg(string, pv=msgPv):
     """Print message to stdout and to message PV."""
