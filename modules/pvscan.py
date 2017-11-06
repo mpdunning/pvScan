@@ -1407,12 +1407,12 @@ def acqDarkCurrent(exp, grabObject, shutter1, shutter2):
 
 def preScan(exp, pv1, grabObject=None):
     """Does pre-scan before main scan.  Pre-scan flag and scan parameters are set from PVs."""
-    #inc1 = (pv1.pre_stop - pv1.pre_start)/(pv1.pre_nsteps - 1)
+    pre_inc = (pv1.pre_stop - pv1.pre_start)/(pv1.pre_nsteps - 1)
     printMsg('Doing pre-scan ' + '-'*20) 
     printMsg('Scanning %s from %f to %f in %d steps' % 
             (pv1.pvname, pv1.pre_start, pv1.pre_stop, pv1.pre_nsteps))
     for i in range(pv1.pre_nsteps):
-        newPos1 = pv1.pre_start + i*pv1.inc
+        newPos1 = pv1.pre_start + i*pre_inc
         printMsg('Setting %s to %f' % (pv1.pvname, newPos1))
         pv1.move(newPos1)
         printSleep(pv1.settletime,'Settling')
