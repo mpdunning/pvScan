@@ -889,6 +889,7 @@ class ADGrabber():
         self.timestampRBVPv = PV(self.imagePvPrefix + ':TimeStamp_RBV')
         self.filePathPv = PV(self.imagePvPrefix + ':FilePath')
         self.fileNamePv = PV(self.imagePvPrefix + ':FileName')
+        self.queueSizePv = PV(self.imagePvPrefix + ':QueueSize')
         self.cameraPvPrefix = cameraPvPrefix
         self.fileNamePrefix = self.cameraPvPrefix  # To make this user modifiable
         self.pvlist = pvlist
@@ -927,7 +928,8 @@ class ADGrabber():
         self.filePathPv.put(self.filepath + '\0')
         self.fileNamePv.put(self.fileNamePrefix + self.filenameExtras + '\0')
         PV(self.imagePvPrefix + ':AutoIncrement').put(1)
-        PV(self.imagePvPrefix + ':FileWriteMode').put(1)
+        # Use "Stream" write mode (FileWriteMode=2) as "Capture" will be removed in a future version of AD:
+        PV(self.imagePvPrefix + ':FileWriteMode').put(2)
         PV(self.imagePvPrefix + ':AutoSave').put(1)
         PV(self.imagePvPrefix + ':FileNumber').put(1)
         if self.captureMode == 1:
@@ -998,13 +1000,16 @@ class ADGrabber():
         """Capture images in AD buffered mode."""
         functionName = '_bufferedCapture'
         logging.debug('%s' % (functionName))
-        self._setAcquire() # Turn acquisition on
+        # Turn acquisition on:
+        self._setAcquire()
         self.numCapturePv.put(self.nImages)
+        # Set QueueSize equal to the number of images:
+        self.queueSizePv.put(self.nImages)
         imageFilenameTemplate = '%s%s_%4.4d' + self.fileExt
         self.templatePv.put(imageFilenameTemplate + '\0')
         if self.waitForNewImageFlag:
             self._waitForNewImage()
-        logging.debug('%s: capturing' % (functionName))
+        logging.debug('%s: capturing, QueueSize=%s' % (functionName, self.nImages))
         self.capturePv.put(1, wait=True)
         # Build a list of filenames for (optional) tiff tag file naming
         if self.writeTiffTagsFlag:
