@@ -905,6 +905,7 @@ class ADGrabber():
         self.grabSeq2Delay = PV(pvPrefix + ':GRABIMAGES:SEQ2DELAY').get() 
         self.nImages2 = PV(pvPrefix + ':GRABIMAGES:N2').get() # N images for second sequence
         self.waitForNewImageFlag = PV(pvPrefix + ':GRABIMAGES:WAIT_NEW').get() # Wait for new image before capturing?
+        self.stopAcquisitionFlag = PV(pvPrefix + ':GRABIMAGES:STOP_ACQ').get() # Stop acquisition at end of scan
         self.imageFilepaths = []
 
     def _create_image_filepath(self):
@@ -952,11 +953,17 @@ class ADGrabber():
         if not self.acquireRBVPv.get(): # If camera is not acquiring...
             logging.debug('%s: turning acquisition on' % (functionName))
             self.acquirePv.put(1) # Try to turn acquisition on
-            sleep(0.5) # Give camera time to turn on...
+            sleep(1.0) # Give camera time to turn on...
             if not self.acquireRBVPv.get():
                 # If unable to acquire, raise exception & quit
                 printMsg('Failed: Camera not acquiring')
                 raise ValueError('Camera not acquiring')
+
+    def stopAcquire(self):
+        """Stops camera acquisition."""
+        functionName = '_stopAcquire'
+        logging.debug('%s: turning acquisition off' % (functionName))
+        self.acquirePv.put(0)
 
     def _writeCameraSettings(self):
         """Writes camera settings to file."""
@@ -1223,6 +1230,11 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutters=None):
                                     printSleep(exp.acqDelay3, 'Pausing')
                             if exp.acqDarkCurrent:
                                 acqDarkCurrent(exp, grabObject, shutter1, shutter2)
+        # Stop acquisition (if enabled)
+        if grabObject:
+            if grabObject.stopAcquisitionFlag:
+                printMsg('Stopping camera acquisition')
+                grabObject.stopAcquire()
         # Move back to initial positions
         printMsg('Setting %s back to initial position: %f' % (pv1.pvname, initialPos1))
         pv1.move(initialPos1)
@@ -1239,6 +1251,11 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutters=None):
                 if grabObject.grabSeq2Flag:
                     pumpedGrabSequence(grabObject, shutter1, shutter2, shutter3)
                 grabObject.grabImages()
+        # Stop acquisition (if enabled)
+        if grabObject:
+            if grabObject.stopAcquisitionFlag:
+                printMsg('Stopping camera acquisition')
+                grabObject.stopAcquire()
     else:
         printMsg('Scan mode "None" selected or no PVs entered, continuing...')
         sleep(1)
