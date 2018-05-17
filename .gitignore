@@ -6,9 +6,8 @@
 testEpicsMotorClass.py
 testMyMotorClass.py
 testScanPvClass.py
+*.bak*
+*.new
+pvscan3.py
+*.py~
 
-<<<<<<< HEAD
-*.swp
-*~
-=======
->>>>>>> c7aa452639cb1792a673b29bbf729df785d00e0e
