@@ -1,12 +1,15 @@
 #!/usr/bin/env python
 # pvScan module
 
+from __future__ import print_function
 import datetime
+import json
 import math
 import logging
 import os
 import random
 import re
+import requests
 import subprocess
 import sys
 from time import sleep, time
@@ -18,7 +21,7 @@ from epics import PV, ca, caget, caput
 try:
     from PIL import Image
 except ImportError:
-    print 'PIL not installed'
+    print('PIL not installed')
 
 try:
     # PV prefix of pvScan IOC
@@ -28,7 +31,7 @@ try:
     # PV for PID (for abort button)
     pidPV = PV(pvPrefix + ':PID')
 except KeyError:
-    print 'PVSCAN_PVPREFIX not defined. Continuing...'
+    print('PVSCAN_PVPREFIX not defined. Continuing...')
     pvPrefix = ''
     msgPv = ''
     pidPV = ''
@@ -71,7 +74,7 @@ class Experiment:
         functionName = '__init__'
         logging.info('%s.%s' % (self.className, functionName))
         if expname is None:
-            expname = PV(pvPrefix + ':IOC.DESC').get()
+            expname = PV(pvPrefix + ':SCAN:SAMPLE_NAME').get()
         if ' ' in expname: expname = expname.replace(' ', '_')
         if scanname is None:
             scanname = PV(pvPrefix + ':SCAN:NAME').get()
@@ -83,9 +86,15 @@ class Experiment:
         self.imageFlag = PV(pvPrefix + ':GRABIMAGES:ENABLE').get()
         self.scanmodePv = PV(pvPrefix + ':SCAN:MODE')
         self.scanmode = self.scanmodePv.get()
+        self.scantype = PV(pvPrefix + ':SCAN:TYPE').get(as_string=True)
+        self.msgSevrPv = PV(pvPrefix + ':MSG_SEVR')
+        self.scanIDPv = PV(pvPrefix + ':SCAN:ID')
+        self.msgSevrPv.put(0)
         self.expname = expname
         self.scanname = scanname
         self.createDirs = createDirs
+        self.scanID = '{0}_{1}'.format(self.expname, NOW)
+        self.scanIDPv.put(self.scanID)
         self.filepath = self._set_filepath(filepath) if self.createDirs else None
         self.scanflag = PV(pvPrefix + ':SCAN:ENABLE').get()
         self.preScanflag = PV(pvPrefix + ':SCAN:PRESCAN').get()
@@ -116,10 +125,17 @@ class Experiment:
         """Create filepath."""
         if filepath is None:
             filepathAutoset = PV(pvPrefix + ':DATA:FILEPATH:AUTOSET').get()
-            if filepathAutoset: 
-                if os.environ['NFSHOME']:
+            if filepathAutoset:
+                default_filepath = '/data/data/'
+                if os.path.exists(default_filepath):
+                    filepath = ('{0}{1}/{2}/{3}{4}/'.format(default_filepath, 
+                            self.expname, self.scantype, NOW, self.scanname))
+                elif os.environ['NFSHOME']:
                     filepath = (os.environ['NFSHOME'] + '/pvScan/' 
                                 + self.expname + '/' +  NOW + self.scanname + '/')
+                    printMsg('Filepath {0} does not exist, defaulting to NFS...'.format(default_filepath))
+                    self.msgSevrPv.put(2)
+                    sleep(5.0)
                 else:
                     filepath = '~/pvScan/' + self.expname + '/' +  NOW + self.scanname + '/'
                 PV(pvPrefix + ':DATA:FILEPATH').put(filepath)  # Write filepath to PV for display
@@ -130,6 +146,7 @@ class Experiment:
         if self.dataFlag or self.logFlag or self.imageFlag:
             if os.path.exists(filepath):
                 msgPv.put('Failed: Filepath already exists')
+                self.msgSevrPv.put(2)
                 raise IOError('Filepath already exists')
             else: 
                 try:
@@ -314,8 +331,8 @@ class BasePv(PV):
             self.delta = None
         # Test for PV validity:
         if not self.status:
-            print 'PV object: ', self
-            print 'PV status: ', self.status
+            print('PV object: ', self)
+            print('PV status: ', self.status)
             printMsg('PV %s not valid' % (self.pvname))
             #raise NameError('PV %s not valid' % (self.pvname))
 
@@ -329,7 +346,7 @@ class BasePv(PV):
                 sleep(pause)
                 count += 1
         except TypeError:
-            print "RBV is invalid for %s, pausing for %f seconds." % (self.pvname,timeout)
+            print("RBV is invalid for %s, pausing for %f seconds." % (self.pvname,timeout))
             sleep(timeout)
 
     def move(self, val, wait=False, delta=0.005, timeout=300.0):
@@ -608,7 +625,7 @@ class ShutterGroup:
                 sleep(0.2)
                 if shutter.rbv.get() < val:
                     printMsg('Failed: Shutter %s check' % (shutter.number))
-                    print 'Shutter: %s Value: %f' % (shutter.pvname, shutter.rbv.get())
+                    print('Shutter: %s Value: %f' % (shutter.pvname, shutter.rbv.get()))
                     raise ValueError('Failed: Shutter check')
     
     def closeCheck(self, val=0.5):
@@ -617,7 +634,7 @@ class ShutterGroup:
                 sleep(0.2)
                 if shutter.rbv.get() > val:
                     printMsg('Failed: Shutter %s check' % (shutter.number))
-                    print 'Shutter: %s Value: %f' % (shutter.pvname, shutter.rbv.get())
+                    print('Shutter: %s Value: %f' % (shutter.pvname, shutter.rbv.get()))
                     raise ValueError('Failed: Shutter check')
 
 
@@ -645,8 +662,12 @@ class DataLogger(Thread):
                 pvlist2 = [PV(line) for line in pvlist2 if line]
             # Add additional monitor PVs to existing PV list
             pvlist += pvlist2
-        # Add shutter RBVs
+        # Add scan PVs
+        if scanpvs is not None:
+            pvlist += [pv for pv in scanpvs if pv]
+        # Add shutter setpoints and RBVs
         if shutters is not None:
+            pvlist += [shutter for shutter in shutters if shutter]
             pvlist += [shutter.rbv for shutter in shutters if shutter.rbv]
         if pvlist is not None:
             pvlist = [pv for pv in pvlist if pv]  # Remove invalid PVs
@@ -757,7 +778,7 @@ class DataLogger(Thread):
                 self.datafile.write('\n')
         except IndexError:
             with self.mutex:
-                print 'DataLogger: list index out of range'
+                print('DataLogger: list index out of range')
 
     def _plotSampleTimes(self):
         """Plot time to sample each PV."""
@@ -807,7 +828,7 @@ class DDGrabber():
                             self.filenameExtras, timestamp(1)))
         self.dataFilenamePv.put(filenameTemplate + '\0')
         printMsg('Writing %s data for %d seconds...' % (self.cameraPvPrefix, self.dataTime))
-        print 'DirectD filepath: ', filenameTemplate
+        print('DirectD filepath: ', filenameTemplate)
         self.dataStartStopPv.put(1)
         sleep(0.25)
         self.dataStartStopPv.put(1)
@@ -997,11 +1018,11 @@ class ADGrabber():
                             '_' + str(timestampFromEpics) + '_' + str(timestampTag) + 
                             '_' + filename.split('_')[-1])
                     os.rename(filepath, filepath.replace(filename, filenameNew))
-                    print '%s --> %s' %(filename, filenameNew)
+                    print('%s --> %s' %(filename, filenameNew))
                 except IOError:
-                    print 'writeTiffTags: IOError'
+                    print('writeTiffTags: IOError')
                 except NameError:
-                    print 'writeTiffTags: PIL not installed'
+                    print('writeTiffTags: PIL not installed')
 
     def _bufferedCapture(self):
         """Capture images in AD buffered mode."""
@@ -1140,7 +1161,7 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutters=None):
         if exp.scanmode == 2 and pv2:
             initialPos2 = pv2.get()
         elif exp.scanmode == 2 and not pv2:
-            print '***WARNING***: pvNDScan: Scan mode 2-D selected but no PV #2.'
+            print('***WARNING***: pvNDScan: Scan mode 2-D selected but no PV #2.')
         # Do pre-scan if enabled from PV
         if exp.preScanflag: preScan(exp, pv1, grabObject)
         # Scan PV #1
@@ -1270,7 +1291,7 @@ def pumpedGrabSequence(grabObject, shutter1, shutter2, shutter3):
     shutter2Stat = shutter2.OCStatus.get()
     shutter3Stat = shutter3.OCStatus.get()
     if debug: 
-        print ('shutter stats: %s, %s, %s' 
+        print('shutter stats: %s, %s, %s' 
                 % (shutter1.OCStatus.get(), shutter2.OCStatus.get(), shutter3.OCStatus.get()))
     printMsg('Opening shutters 1, 2 and 3')
     shutter1.open.put(1)
@@ -1278,14 +1299,14 @@ def pumpedGrabSequence(grabObject, shutter1, shutter2, shutter3):
     shutter3.open.put(1)
     sleep(0.25)
     if debug: 
-        print ('shutter stats: %s, %s, %s'
+        print('shutter stats: %s, %s, %s'
                 % (shutter1.OCStatus.get(), shutter2.OCStatus.get(), shutter3.OCStatus.get()))
-    if debug: print grabObject.filenameExtras
+    if debug: print(grabObject.filenameExtras)
     if 'Static' in grabObject.filenameExtras:
         grabObject.filenameExtras = grabObject.filenameExtras.replace('Static', 'Pumped')
     else:
         grabObject.filenameExtras = '_' + 'Pumped' + grabObject.filenameExtras
-    if debug: print grabObject.filenameExtras
+    if debug: print(grabObject.filenameExtras)
     grabObject.grabImages(grabObject.nImages2)
     printMsg('Returning shutters to initial state')
     shutter1.open.put(1) if shutter1Stat == 1 else shutter1.close.put(0)
@@ -1293,14 +1314,14 @@ def pumpedGrabSequence(grabObject, shutter1, shutter2, shutter3):
     shutter3.open.put(1) if shutter3Stat == 1 else shutter3.close.put(0)
     sleep(0.25)
     if debug: 
-        print ('shutter stats: %s, %s, %s' 
+        print('shutter stats: %s, %s, %s' 
                 % (shutter1.OCStatus.get(), shutter2.OCStatus.get(), shutter3.OCStatus.get()))
-    if debug: print grabObject.filenameExtras
+    if debug: print(grabObject.filenameExtras)
     if 'Pumped' in grabObject.filenameExtras:
         grabObject.filenameExtras = grabObject.filenameExtras.replace('Pumped', 'Static')
     else:
         grabObject.filenameExtras = '_' + 'Static'
-    if debug: print grabObject.filenameExtras
+    if debug: print(grabObject.filenameExtras)
     printMsg('Finished pumped image sequence')
     printSleep(grabObject.grabSeq2Delay)
 
@@ -1461,7 +1482,6 @@ def runUserScript():
         logging.error('runUserScript: path is zero length')
         return(-1)
     runUserScriptPath = runUserScriptPath.split()
-    #print runUserScriptPath
     printMsg('Running user script...')
     try:
         subprocess.call(runUserScriptPath)
@@ -1540,13 +1560,65 @@ class ScanCorrection():
         self.scanCorPv2.put(self.initVal2)
 
 
+class Elog():
+    """Post an elog..."""
+    def __init__(self, expname, user, password, url):
+        self.className = self.__class__.__name__
+        functionName = '__init__'
+        logging.info('%s.%s' % (self.className, functionName))
+        self._expname = expname
+        self._user = user
+        self._password = password
+        self._url = url
+        self._serverURLPrefix = "{0}run_control/{1}/ws/".format(self._url
+                + "/" if not self._url.endswith("/") else self._url, self._expname)
+
+    def start(self):
+        """Start run..."""
+        functionName = 'start'
+        requests.post(self._serverURLPrefix + "start_run", 
+                auth=requests.auth.HTTPBasicAuth(self._user, self._password))
+
+    def set_params(self, pvnamelist=None):
+        """Set run params..."""
+        functionName = 'get_params'
+        if pvnamelist is None: pvnamelist = []
+        pvdata = {}
+        for name in pvnamelist:
+            chid = ca.create_channel(name, connect=False, auto_cb=False) # note 1
+            pvdata[name] = [chid, None]
+        for name, data in pvdata.items():
+            ca.connect_channel(data[0])
+        ca.poll()
+        for name, data in pvdata.items():
+            ca.get(data[0], wait=False)  # note 2
+        ca.poll()
+        for name, data in pvdata.items():
+            val = ca.get_complete(data[0])
+            pvdata[name][1] = val
+        #return { name: data[1] for name, data in pvdata.items()}
+        return dict((name, data[1]) for name, data in pvdata.items())
+
+    def add_params(self):
+        """Add run params..."""
+        functionName = 'add_params'
+        requests.post(self._serverURLPrefix + "add_run_params", json=self._set_params(), 
+                auth=requests.auth.HTTPBasicAuth(self._user, self._password))
+
+    def end(self):
+        """End run..."""
+        functionName = 'end'
+        requests.post(self._serverURLPrefix + "end_run", 
+                auth=requests.auth.HTTPBasicAuth(self._user, self._password))
+
+
 def printMsg(string, pv=msgPv):
     """Print message to stdout and to message PV."""
     try:
-        print '%s %s' % (timestamp(1), string)
+        print('%s %s' % (timestamp(1), string))
         pv.put(string)
     except ValueError:
-        print 'msgPv.put failed: string too long'
+        print('msgPv.put failed: string too long')
 
 
 def printSleep(sleepTime, string='Pausing', pv=msgPv):
@@ -1559,8 +1631,9 @@ def printSleep(sleepTime, string='Pausing', pv=msgPv):
 
 def printScanInfo(exp, scanpvs=None):
     """Print scan info."""
-    print '################################'
+    print('################################')
     print('Scan mode: %s' % (exp.scanmodePv.get(as_string=True)))
+    print('Scan ID: %s' % (exp.scanIDPv.get(as_string=True)))
     try:
         if scanpvs is not None:
             if exp.scanmode == 1:
@@ -1584,8 +1657,8 @@ def printScanInfo(exp, scanpvs=None):
         else:
             pass
     except IndexError:
-        print '***WARNING***: printScanInfo: IndexError'
-    print '################################'
+        print('***WARNING***: printScanInfo: IndexError')
+    print('################################')
 
 
 def frange(start, stop, step=1.0):
@@ -1626,7 +1699,7 @@ def isNumber(number):
         float(number)
         return True
     except ValueError:
-        print 'isNumber: %s not a number.' % (number)
+        print('isNumber: %s not a number.' % (number))
         return False
 
 
@@ -1636,18 +1709,18 @@ if __name__ == "__main__":
     args = 'PV_PREFIX'
     def show_usage():
         "Prints usage"
-        print 'Usage: %s %s' % (sys.argv[0], args)
+        print('Usage: %s %s' % (sys.argv[0], args))
     if len(sys.argv) != 2:
         show_usage()
         sys.exit(1)
     pvPrefix = sys.argv[1]
     iocPv = PV(pvPrefix + ':IOC')
-    print 'IOC name PV: ', iocPv
-    print 'IOC name: ', iocPv.get()        
+    print('IOC name PV: ', iocPv)
+    print('IOC name: ', iocPv.get())
+    sys.exit(0)
     
 
 ##################################################################################################################
         
 
-exit
 
