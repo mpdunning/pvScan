@@ -52,20 +52,25 @@ if DEBUG:
     print('filepath: ', filepath)
     print('n_runs: ', n_runs)
 
+# Configure elog
 elogFlag = PV(pv_prefix + ':ELOG:ENABLE').get()
 if elogFlag:
     expname = PV(pv_prefix + ':SCAN:SAMPLE_NAME').get(as_string=True)
     username = getpass.getuser()
     elog = Elog(expname, username, password='testfac',
             url='https://testfac-lgbk.slac.stanford.edu/testfac_operator/')
-    pvlist = ['ASTA:PV04:DATE', 'ASTA:PV04:TIME', 'ASTA:PV04:SCAN:TYPE', 'ASTA:PV04:SCANPV1:PVNAME',
-              'GUN:AS01:1:ADES', 'MOTR:AS01:MC01:CH1:MOTOR', 'MOTR:AS01:MC03:CH7:MOTOR',
-              'MOTR:AS01:MC03:CH8:MOTOR', 'MOTR:AS01:MC02:CH3:MOTOR', 'MOTR:AS01:MC02:CH5:MOTOR',
-              'MOTR:AS01:MC02:CH6:MOTOR', 'MOTR:AS01:MC02:CH4:MOTOR.DESC', 'ASTA:AI:3314-3C-9:CH1',
-              'ASTA:AI:3314-1C-9:CH4', 'ASTA:CALC:3162-9:CH1', 'VGXX:AS01:290:COMBO_P',
-              'VGCC:AS01:275:PMONRAW', 'ASTA:PV04:SCANPV1:RAND_VALS', 'ANDOR1:cam1:AndorEMGain',
-              'ANDOR1:cam1:AcquireTime', 'ASTA:PV04:DATA:FILEPATH', 'ASTA:PV04:SCAN:DATA_DEST',
-              'ASTA:PV04:SCAN:ID', 'ASTA:PV04:SCAN:DATA_DEST', 'ASTA:PV04:SCAN:TYPE']
+    pvlist_asta =  ['ASTA:PV04:DATE', 'ASTA:PV04:TIME', 'ASTA:PV04:SCAN:TYPE', 'ASTA:PV04:SCANPV1:PVNAME',
+                    'GUN:AS01:1:ADES', 'MOTR:AS01:MC01:CH1:MOTOR', 'MOTR:AS01:MC03:CH7:MOTOR',
+                    'MOTR:AS01:MC03:CH8:MOTOR', 'MOTR:AS01:MC02:CH3:MOTOR', 'MOTR:AS01:MC02:CH5:MOTOR',
+                    'MOTR:AS01:MC02:CH6:MOTOR', 'MOTR:AS01:MC02:CH4:MOTOR.DESC', 'ASTA:AI:3314-3C-9:CH1',
+                    'ASTA:AI:3314-1C-9:CH4', 'ASTA:CALC:3162-9:CH1', 'VGXX:AS01:290:COMBO_P',
+                    'VGCC:AS01:275:PMONRAW', 'ASTA:PV04:SCANPV1:RAND_VALS', 'ANDOR1:cam1:AndorEMGain',
+                    'ANDOR1:cam1:AcquireTime', 'ASTA:PV04:DATA:FILEPATH', 'ASTA:PV04:SCAN:DATA_DEST',
+                    'ASTA:PV04:SCAN:ID', 'ASTA:PV04:SCAN:DATA_DEST', 'ASTA:PV04:SCAN:TYPE']
+    if username == 'asta':
+        pvlist = pvlist_asta
+    else:
+        pvlist = []
 
 # Start Scan
 run_pv.put(1)
