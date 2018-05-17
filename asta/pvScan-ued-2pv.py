@@ -31,13 +31,14 @@ print_lock = threading.Lock()  # For thread-safe printing
 # Set up a scan with 2 Scan PVs, 3 shutters
 exp = pvscan.Experiment(npvs=2, nshutters=3, mutex=print_lock)
 
-# Set up elog
-#elog = pvscan.Elog(exp.expname, 'asta', 'testfac', 'https://testfac-lgbk.slac.stanford.edu/testfac/')
+#elog = pvscan.Elog(exp.expname, user='asta', password='testfac', 
+#        url='https://testfac-lgbk.slac.stanford.edu/testfac_operator/')
 #-------------------------------------------------
 
 # Add extra monitor PVs here.  Yuo can also add them to the "Monitor PV list" in the GUI.
 # For example: 
 # exp.dataLog.pvlist += [PV('ASTA:AO:BK05:V0079'), PV('ASTA:AO:BK05:V0080')]
+#print([pv.pvname for pv in exp.dataLog.pvlist])
 
 ### Define scan routine #####################################################
 def scanRoutine():
@@ -66,8 +67,10 @@ if __name__ == "__main__":
             # Start logging data
             exp.dataLog.start()
         # Start elog entry
+#        print('Creating elog entry...')
 #        elog.start()
-#        elog.set_params()
+#        elog.add_params(pvnamelist=[pv.pvname for pv in exp.dataLog.pvlist])
+        # Do scan
         scanRoutine()
         sleep(0.5) # Log data for a little longer
         pvscan.printMsg('Done')

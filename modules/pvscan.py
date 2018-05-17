@@ -3,13 +3,11 @@
 
 from __future__ import print_function
 import datetime
-import json
 import math
 import logging
 import os
 import random
 import re
-import requests
 import subprocess
 import sys
 from time import sleep, time
@@ -1558,58 +1556,6 @@ class ScanCorrection():
         self.scanCorPv1.put(self.initVal1)
         printMsg('Resetting %s back to %f' % (self.scanCorPv2.pvname, self.initVal2))
         self.scanCorPv2.put(self.initVal2)
-
-
-class Elog():
-    """Post an elog..."""
-    def __init__(self, expname, user, password, url):
-        self.className = self.__class__.__name__
-        functionName = '__init__'
-        logging.info('%s.%s' % (self.className, functionName))
-        self._expname = expname
-        self._user = user
-        self._password = password
-        self._url = url
-        self._serverURLPrefix = "{0}run_control/{1}/ws/".format(self._url
-                + "/" if not self._url.endswith("/") else self._url, self._expname)
-
-    def start(self):
-        """Start run..."""
-        functionName = 'start'
-        requests.post(self._serverURLPrefix + "start_run", 
-                auth=requests.auth.HTTPBasicAuth(self._user, self._password))
-
-    def set_params(self, pvnamelist=None):
-        """Set run params..."""
-        functionName = 'get_params'
-        if pvnamelist is None: pvnamelist = []
-        pvdata = {}
-        for name in pvnamelist:
-            chid = ca.create_channel(name, connect=False, auto_cb=False) # note 1
-            pvdata[name] = [chid, None]
-        for name, data in pvdata.items():
-            ca.connect_channel(data[0])
-        ca.poll()
-        for name, data in pvdata.items():
-            ca.get(data[0], wait=False)  # note 2
-        ca.poll()
-        for name, data in pvdata.items():
-            val = ca.get_complete(data[0])
-            pvdata[name][1] = val
-        #return { name: data[1] for name, data in pvdata.items()}
-        return dict((name, data[1]) for name, data in pvdata.items())
-
-    def add_params(self):
-        """Add run params..."""
-        functionName = 'add_params'
-        requests.post(self._serverURLPrefix + "add_run_params", json=self._set_params(), 
-                auth=requests.auth.HTTPBasicAuth(self._user, self._password))
-
-    def end(self):
-        """End run..."""
-        functionName = 'end'
-        requests.post(self._serverURLPrefix + "end_run", 
-                auth=requests.auth.HTTPBasicAuth(self._user, self._password))
 
 
 def printMsg(string, pv=msgPv):
