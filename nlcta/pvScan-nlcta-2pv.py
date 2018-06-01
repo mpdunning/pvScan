@@ -2,6 +2,7 @@
 # For doing DAQ scans.  Logs PV data to a file while doing scan of an arbitrary PV. Uses a supporting IOC (pvScan).
 # mdunning 1/7/16
 
+from __future__ import print_function
 import os
 import sys
 import threading
@@ -16,20 +17,20 @@ os.environ['PVSCAN_PVPREFIX'] = pvPrefix
 
 # For printing status messages to PV
 msgPv = PV(pvPrefix + ':MSG')
-msgPv.put('Initializing...')
-print 'Initializing...'
+msgPv.put('Initializing scan...')
+print('Initializing scan...')
 
 # Import pvScan module
 sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/prod/modules/')
 import pvscan2
-pvscan2.loggingConfig()
 
 ### Set up scan #####################################################
+pvscan2.loggingConfig()
 print_lock = threading.Lock()  # For thread-safe printing
 
 # Set up a scan with 2 Scan PVs, 3 shutters
-exp = pvscan2.Experiment(npvs=2, nshutters=3, mutex=print_lock)
 #-------------------------------------------------
+exp = pvscan2.Experiment(npvs=2, nshutters=3, mutex=print_lock)
 
 ### Define scan routine #####################################################
 def scanRoutine():
@@ -55,7 +56,7 @@ if __name__ == "__main__":
         args = 'PV_PREFIX'
         def show_usage():
             "Prints usage"
-            print 'Usage: %s %s' %(sys.argv[0], args)
+            print('Usage: %s %s' %(sys.argv[0], args))
         if len(sys.argv) != 2:
             show_usage()
             sys.exit(1)
