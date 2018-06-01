@@ -12,28 +12,26 @@ from epics import PV
 
 # PV prefix for pvScan IOC; should be passed as an argument to this script.
 pvPrefix = sys.argv[1]
-# Set an environment variable for so pvScan module can use it
+# Set an environment variable for pvScan module
 os.environ['PVSCAN_PVPREFIX'] = pvPrefix
 
 # For printing status messages to PV
 msgPv = PV(pvPrefix + ':MSG')
-msgPv.put('Initializing...')
-print('Initializing...')
+msgPv.put('Initializing scan...')
+print('Initializing scan...')
 
 # Import pvScan module
 sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/prod/modules/')
 import pvscan
+
+# Configure logging
 pvscan.loggingConfig()
 
-### Set up scan #####################################################
-print_lock = threading.Lock()  # For thread-safe printing
+# For thread-safe printing
+print_lock = threading.Lock()
 
 # Set up a scan with 2 Scan PVs, 3 shutters
 exp = pvscan.Experiment(npvs=2, nshutters=3, mutex=print_lock)
-
-#elog = pvscan.Elog(exp.expname, user='asta', password='testfac', 
-#        url='https://testfac-lgbk.slac.stanford.edu/testfac_operator/')
-#-------------------------------------------------
 
 # Add extra monitor PVs here.  Yuo can also add them to the "Monitor PV list" in the GUI.
 # For example: 
@@ -66,10 +64,6 @@ if __name__ == "__main__":
         if exp.dataLog.dataEnable:
             # Start logging data
             exp.dataLog.start()
-        # Start elog entry
-#        print('Creating elog entry...')
-#        elog.start()
-#        elog.add_params(pvnamelist=[pv.pvname for pv in exp.dataLog.pvlist])
         # Do scan
         scanRoutine()
         sleep(0.5) # Log data for a little longer
@@ -77,8 +71,6 @@ if __name__ == "__main__":
     finally:
         # Stop logging data
         exp.dataLog.stop()
-        # End elog entry
-#        elog.end()
 
         
 ### End ##########################################################################
