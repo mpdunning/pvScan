@@ -57,7 +57,7 @@ class Elog():
         pvdata = {}
         for name in self._pvnamelist:
             pv = PV(name)
-            pvdata[pv.pvname] = pv.char_value
+            pvdata[pv.pvname] = pv.get(as_string=True)
         return pvdata
 
     def _set_params2(self):
