@@ -91,8 +91,6 @@ class Experiment:
         self.expname = expname
         self.scanname = scanname
         self.createDirs = createDirs
-        self.scanID = '{0}_{1}'.format(self.expname, NOW)
-        self.scanIDPv.put(self.scanID)
         self.filepath = self._set_filepath(filepath) if self.createDirs else None
         self.scanflag = PV(pvPrefix + ':SCAN:ENABLE').get()
         self.preScanflag = PV(pvPrefix + ':SCAN:PRESCAN').get()
@@ -122,25 +120,9 @@ class Experiment:
     def _set_filepath(self, filepath):
         """Create filepath."""
         if filepath is None:
-            filepathAutoset = PV(pvPrefix + ':DATA:FILEPATH:AUTOSET').get()
-            if filepathAutoset:
-                default_filepath = '/data/data/'
-                if os.path.exists(default_filepath):
-                    filepath = ('{0}{1}/{2}/{3}{4}/'.format(default_filepath, 
-                            self.expname, self.scantype, NOW, self.scanname))
-                elif os.environ['NFSHOME']:
-                    filepath = (os.environ['NFSHOME'] + '/pvScan/' 
-                                + self.expname + '/' +  NOW + self.scanname + '/')
-                    printMsg('Filepath {0} does not exist, defaulting to NFS...'.format(default_filepath))
-                    self.msgSevrPv.put(2)
-                    sleep(5.0)
-                else:
-                    filepath = '~/pvScan/' + self.expname + '/' +  NOW + self.scanname + '/'
-                PV(pvPrefix + ':DATA:FILEPATH').put(filepath)  # Write filepath to PV for display
-            else:
-                filepath = PV(pvPrefix + ':DATA:FILEPATH').get(as_string=True)
-                if not filepath.endswith('/'): filepath = filepath + '/'
-                if ' ' in filepath: filepath = filepath.replace(' ', '_')
+            filepath = PV(pvPrefix + ':DATA:FILEPATH').get(as_string=True)
+            if not filepath.endswith('/'): filepath = filepath + '/'
+            if ' ' in filepath: filepath = filepath.replace(' ', '_')
         if self.dataFlag or self.logFlag or self.imageFlag:
             if os.path.exists(filepath):
                 msgPv.put('Failed: Filepath already exists')
@@ -150,6 +132,7 @@ class Experiment:
                 try:
                     os.makedirs(filepath)
                 except OSError as e:
+                    print('Failed: %s: %s' % (e.strerror, e.filename))
                     msgPv.put('Failed: %s: %s' % (e.strerror, e.filename))
                     sys.exit(e.errno)
         return filepath
@@ -634,7 +617,6 @@ class ShutterGroup:
                     printMsg('Failed: Shutter %s check' % (shutter.number))
                     print('Shutter: %s Value: %f' % (shutter.pvname, shutter.rbv.get()))
                     raise ValueError('Failed: Shutter check')
-
 
 
 class DataLogger(Thread):
@@ -1168,14 +1150,14 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutters=None):
         else:
             printMsg('Scanning %s from %f to %f in %d steps' % 
                     (pv1.pvname, pv1.start, pv1.stop, len(pv1.scanPos)))
-        stepCount1 = 1
+        stepCount1 = 0
         for x in pv1.scanPos:
             printMsg('Setting %s to %f' % (pv1.pvname, x))
             pv1.move(x)
             if exp.scanCorFlag:
                 scanCorr1.set(x)
-            pv1.stepCountPv.put(stepCount1)
             stepCount1 += 1
+            pv1.stepCountPv.put(stepCount1)
             printSleep(pv1.settletime,'Settling')
             # Scan PV #2
             if exp.scanmode == 2 and pv2:
@@ -1184,12 +1166,12 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutters=None):
                 else:
                     printMsg('Scanning %s from %f to %f in %d steps' % 
                             (pv2.pvname, pv2.start, pv2.stop, len(pv2.scanPos)))
-                stepCount2 = 1
+                stepCount2 = 0
                 for y in pv2.scanPos:
                     printMsg('Setting %s to %f' % (pv2.pvname, y))
                     pv2.move(y)
-                    pv2.stepCountPv.put(stepCount2)
                     stepCount2 += 1
+                    pv2.stepCountPv.put(stepCount2)
                     printSleep(pv2.settletime, 'Settling')
                     if exp.runUserScriptFlag:
                         runUserScript()
