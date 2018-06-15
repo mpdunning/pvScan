@@ -1606,7 +1606,7 @@ def frange(start, stop, step=1.0):
     elif stop < start:
         while x >= float(stop):
             yield x
-            x += float(step)
+            x -= float(step)
     else:
         yield x
 
