@@ -11,13 +11,7 @@ import sys
 from time import sleep
 from epics import PV, ca, caget, caput
 
-##################################################################################################################
-
-def loggingConfig():
-    """Configure logging."""
-    logLevel = logging.WARNING
-    logging.basicConfig(format='%(levelname)s [%(asctime)s]: %(message)s', datefmt='%I:%M:%S', level=logLevel)
-
+#################################################################################################################
 
 class Elog():
     """Post an elog..."""
@@ -25,7 +19,7 @@ class Elog():
 #    def __init__(self, expname, user, password, url, message):
         self.className = self.__class__.__name__
         functionName = '__init__'
-        logging.info('%s.%s' % (self.className, functionName))
+        logging.debug('%s.%s' % (self.className, functionName))
         self._expname = expname
         self._user = user
         self._password = password
@@ -50,6 +44,9 @@ class Elog():
         if resp.status_code != requests.codes.ok:
             logging.warning('{0}.{1}: Failed to start elog entry, response={2}'
                     .format(self.className, functionName, resp))
+            return False
+        else:
+            return True
 
     def _set_params(self):
         """Set run params..."""
