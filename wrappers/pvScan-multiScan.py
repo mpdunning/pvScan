@@ -15,7 +15,7 @@ from elog import Elog
 
 # Command-line arguments
 parser = argparse.ArgumentParser()
-parser.add_argument('pv_prefix', help='This is the PV prefix of the DAQ IOC, e.g. ASTA:PV01')
+parser.add_argument('pv_prefix', help='PV prefix of the DAQ IOC, e.g. ASTA:PV01')
 parser.add_argument('n_scans', nargs='?', default=0, help="Number of scans per run")
 args = parser.parse_args()
 #
@@ -72,7 +72,7 @@ if filepath_autoset:
     else:
         root_filepath = '~'
     filepath = ('{0}{1}/{2}/{3}/{4}/'.format(root_filepath, sample_name, TODAY, scantype, NOW))
-    PV(pv_prefix + ':DATA:FILEPATH').put(filepath)  # Write filepath to PV for display
+    PV(pv_prefix + ':DATA:FILEPATH').put(filepath)  # Write filepath to PV
 else:
     filepath = PV(pv_prefix + ':DATA:FILEPATH').get(as_string=True)
 
