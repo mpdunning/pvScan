@@ -311,10 +311,9 @@ class BasePv(PV):
         else:
             self.delta = None
         # Test for PV validity:
-        if not self.status:
-            print('PV object: ', self)
-            print('PV status: ', self.status)
-            printMsg('PV %s not valid' % (self.pvname))
+        if not self.connect():
+            printMsg('PV {0} invalid'.format(self.pvname))
+            print 'Object: {0}, Status: {1}'.format(self, self.status)
             #raise NameError('PV %s not valid' % (self.pvname))
 
     def pvWait(self, val, delta=0.005, timeout=180.0):
@@ -652,7 +651,7 @@ class DataLogger(Thread):
         if pvlist is not None:
             pvlist = [pv for pv in pvlist if pv]  # Remove invalid PVs
             for pv in pvlist:
-                if not pv.status:
+                if not pv.connect():
                     pvlist.remove(pv)
                     with self.mutex:
                         printMsg('PV %s invalid: removed from Data Logger' % (pv.pvname))
