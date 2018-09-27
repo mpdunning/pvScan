@@ -3,6 +3,7 @@
 # mdunning 1/7/16
 
 from __future__ import print_function
+import logging
 import os
 import sys
 import threading
@@ -12,21 +13,20 @@ from epics import PV
 
 # PV prefix for pvScan IOC; should be passed as an argument to this script.
 pvPrefix = sys.argv[1]
-# Set an environment variable for so pvScan module can use it
-os.environ['PVSCAN_PVPREFIX'] = pvPrefix
+## Set an environment variable for so pvScan module can use it
+#os.environ['PVSCAN_PVPREFIX'] = pvPrefix
 
-# For printing status messages to PV
-msgPv = PV(pvPrefix + ':MSG')
-msgPv.put('Initializing scan...')
-print('Initializing scan...')
 
 # Import pvScan module
 sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/prod/modules/')
 import pvscan2
+pvscan2.loggingConfig('script')
+pvscan2.printMsg('Initializing scan...')
+
+# For thread-safe printing
+print_lock = threading.Lock()
 
 ### Set up scan #####################################################
-pvscan2.loggingConfig()
-print_lock = threading.Lock()  # For thread-safe printing
 
 # Set up a scan with 2 Scan PVs, 3 shutters
 #-------------------------------------------------

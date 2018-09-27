@@ -20,8 +20,9 @@ msgPv.put('Aborting...')
 print 'Aborting...'
 
 # Import pvScan module
-sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/dev/modules/')
+sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/prod/modules/')
 import pvscan2
+pvscan2.loggingConfig('abort script')
 
 # Get PID PV
 pid=pvscan2.pidPV.get()
@@ -44,7 +45,7 @@ def abortRoutine():
     pvscan2.printMsg('Stopping move(s)')
     try:
         for pv in exp.scanpvs:
-            pv.abort.put(1)
+            pv.abort()
     except AttributeError:
         'Warning: abortRoutine: AttributeError'
     # Shutters
