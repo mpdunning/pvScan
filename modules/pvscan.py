@@ -312,9 +312,8 @@ class BasePv(PV):
             self.delta = None
         # Test for PV validity:
         if not self.connect():
-            printMsg('PV {0} invalid'.format(self.pvname))
-            print 'Object: {0}, Status: {1}'.format(self, self.status)
-            #raise NameError('PV %s not valid' % (self.pvname))
+            printMsg('WARNING: PV {0} invalid'.format(self.pvname))
+            logging.warning('Object: {0}, Status: {1}'.format(self, self.status))
 
     def pvWait(self, val, delta=0.005, timeout=180.0):
         """Wait until PV is near readback (or times out) to proceed."""
@@ -652,9 +651,12 @@ class DataLogger(Thread):
             pvlist = [pv for pv in pvlist if pv]  # Remove invalid PVs
             for pv in pvlist:
                 if not pv.connect():
-                    pvlist.remove(pv)
-                    with self.mutex:
-                        printMsg('PV %s invalid: removed from Data Logger' % (pv.pvname))
+                    # Pause and try again
+                    sleep(0.1)
+                    if not pv.connect():
+                        pvlist.remove(pv)
+                        with self.mutex:
+                            printMsg('WARNING: PV %s invalid: removed from Data Logger' % (pv.pvname))
         self.pvlist = pvlist
         self.filepath = filepath
         self.dataFilename = self.filepath + NOW + '.dat'
