@@ -340,8 +340,8 @@ class BasePv(PV):
         """Shuffle a string of values into a random list of floats.
         Comma, semicolon, and whitespace delimiters recognized, 
         as well as start:step:stop ranges."""
-        lst = re.split(r'[;,\s]\s*', strng) 
-        rangePat = re.compile(r'([-+]?\d*\.\d+|\d+):([-+]?\d*\.\d+|\d+):([-+]?\d*\.\d+|\d+)')
+        lst = re.split(r'[;,\s]\s*', strng)
+        rangePat = re.compile(r'([-+]?(\.)?\d+(\.\d*)?):([-+]?(\.)?\d+(\.\d*)?):([-+]?(\.)?\d+(\.\d*)?)')
         lst = [expandRange(rangePat.search(x).group(0)) if rangePat.search(x) else x for x in lst]
         lst = flattenList(lst)
         lst = [float(x) for x in lst if isNumber(x)]
@@ -1613,7 +1613,7 @@ def frange(start, stop, step=1.0):
 
 def expandRange(strng):
     """Expands a matlab-style range string, e.g. 1:0.2:5, and generates a list of string values."""
-    if re.match(r'([-+]?\d*\.\d+|\d+):([-+]?\d*\.\d+|\d+):([-+]?\d*\.\d+|\d+)', strng):
+    if re.match(r'([-+]?(\.)?\d+(\.\d*)?):([-+]?(\.)?\d+(\.\d*)?):([-+]?(\.)?\d+(\.\d*)?)', strng):
         start, step, stop = strng.split(':')
         lst = [str(x) for x in frange(start, stop, step)]
         return lst
