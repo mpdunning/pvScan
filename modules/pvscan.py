@@ -1600,11 +1600,11 @@ def printScanInfo(exp, scanpvs=None):
 def frange(start, stop, step=1.0):
     """A range() for floats."""
     x = float(start)
-    if stop > start:
+    if float(stop) > x:
         while x <= float(stop):
             yield x
             x += float(step)
-    elif stop < start:
+    elif float(stop) < x:
         while x >= float(stop):
             yield x
             x -= float(step)
