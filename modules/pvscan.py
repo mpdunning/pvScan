@@ -295,12 +295,15 @@ class BasePv(PV):
             self.randomScanflag = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':RANDSCAN').get()
             self.t0Enable = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':T0_ENABLE').get()
             self.t0 = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':T0').get()
-            self.t0DelayUnits = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':T0_DELAYUNITS').get()
-            t0delayOpts = [1e-6, 1e-9, 1e-12, 1e-15, 1e-18]
+            self.t0DelayUnits = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) 
+                    + ':T0_DELAYUNITS').get(as_string=True)
+            # This dict must match the T0_DELAYUNITS epics record:
+            t0delayOpts = {'us':1e-6, 'ns':1e-9, 'ps':1e-12, 'fs':1e-15, 'as':1e-18}
             # Do random scan if enabled from PV
             if self.randomScanflag:
-                randValStr = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':RAND_VALS').get(as_string=True)
-                self.scanPos = self._shuffleString(randValStr)
+                self.randValStr = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) 
+                        + ':RAND_VALS').get(as_string=True)
+                self.scanPos = self._shuffleString(self.randValStr)
             else:
                 self.scanPos = np.linspace(self.start, self.stop, num=self.nsteps)
             if self.t0Enable:
@@ -1158,7 +1161,7 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutters=None):
         if exp.preScanflag: preScan(exp, pv1, grabObject)
         # Scan PV #1
         if pv1.randomScanflag:
-            printMsg('Scanning %s randomly' %(pv1.pvname))
+            printMsg('Scanning %s randomly over %s' % (pv1.pvname, pv1.randValStr))
         else:
             printMsg('Scanning %s from %f to %f in %d steps' % 
                     (pv1.pvname, pv1.start, pv1.stop, len(pv1.scanPos)))
@@ -1174,7 +1177,7 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutters=None):
             # Scan PV #2
             if exp.scanmode == 2 and pv2:
                 if pv1.randomScanflag:
-                    printMsg('Scanning %s randomly' %(pv1.pvname))
+                    printMsg('Scanning %s randomly over %s' % (pv1.pvname, pv1.randValStr))
                 else:
                     printMsg('Scanning %s from %f to %f in %d steps' % 
                             (pv2.pvname, pv2.start, pv2.stop, len(pv2.scanPos)))
@@ -1577,24 +1580,26 @@ def printSleep(sleepTime, string='Pausing', pv=msgPv):
 def printScanInfo(exp, scanpvs=None):
     """Print scan info."""
     print('################################')
-    print('Scan mode: %s' % (exp.scanmodePv.get(as_string=True)))
-    print('Scan ID: %s' % (exp.scanIDPv.get(as_string=True)))
+    print('Scan mode: {0}'.format(exp.scanmodePv.get(as_string=True)))
+    print('Scan ID: {0}'.format(exp.scanIDPv.get(as_string=True)))
     try:
         if scanpvs is not None:
             if exp.scanmode == 1:
                 if scanpvs[0].pvname:
-                    print('PV #1 type: %s' % (scanpvs[0].pvtypePv.get(as_string=True)))
+                    print('PV #1 type: {0}'.format(scanpvs[0].pvtypePv.get(as_string=True)))
+                    if scanpvs[0].t0Enable:
+                        print('Time-zero scan [{0}]'.format(scanpvs[0].t0DelayUnits))
                 elif scanpvs[1].pvname and not scanpvs[0].pvname:
-                    print('PV #2 type: %s' % (scanpvs[1].pvtypePv.get(as_string=True)))
+                    print('PV #2 type: {0}'.format(scanpvs[1].pvtypePv.get(as_string=True)))
                 else:
                     pass
             elif exp.scanmode == 2:
                 if scanpvs[0].pvname:
-                    print('PV #1 type: %s' % (scanpvs[0].pvtypePv.get(as_string=True)))
+                    print('PV #1 type: {0}'.format(scanpvs[0].pvtypePv.get(as_string=True)))
                 else:
                     print('PV #1 type: No PV entered')
                 if scanpvs[1].pvname:   
-                    print('PV #2 type: %s' % (scanpvs[1].pvtypePv.get(as_string=True)))
+                    print('PV #2 type: {0}'.format(scanpvs[1].pvtypePv.get(as_string=True)))
                 else:
                     print('PV #2 type: No PV entered')
             else:
