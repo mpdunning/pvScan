@@ -306,7 +306,9 @@ class BasePv(PV):
             if self.t0Enable:
                 # If T0 enable is yes, then convert user values from time delay back to EGU.
                 # The factor of 2 is for a 2-pass delay stage.
-                self.scanPos = [x*t0delayOpts[self.t0DelayUnits]*2.9979e8*0.5 + self.t0 for x in self.scanPos]
+                # The factor of 1e3 is because the stage units are assumed to be mm.
+                scaleFactor = t0delayOpts[self.t0DelayUnits]*2.9979e8*0.5*1e3
+                self.scanPos = [x*scaleFactor + self.t0 for x in self.scanPos]
             logging.debug('%s.%s: scanPos: %s' % (className, functionName, self.scanPos))
             self.offset = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':OFFSET').get()
             self.settletime = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':SETTLETIME').get()
