@@ -293,13 +293,20 @@ class BasePv(PV):
             self.nsteps = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':NSTEPS').get()
             self.inc = (self.stop - self.start)/(self.nsteps - 1)
             self.randomScanflag = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':RANDSCAN').get()
+            self.t0Enable = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':T0_ENABLE').get()
+            self.t0 = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':T0').get()
+            self.t0DelayUnits = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':T0_DELAYUNITS').get()
+            t0delayOpts = [1e-6, 1e-9, 1e-12, 1e-15, 1e-18]
             # Do random scan if enabled from PV
             if self.randomScanflag:
                 randValStr = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':RAND_VALS').get(as_string=True)
                 self.scanPos = self._shuffleString(randValStr)
             else:
-                #self.scanPos = [x for x in frange(self.start, self.stop, self.inc)]
                 self.scanPos = np.linspace(self.start, self.stop, num=self.nsteps)
+            if self.t0Enable:
+                # If T0 enable is yes, then convert user values from time delay back to EGU.
+                # The factor of 2 is for a 2-pass delay stage.
+                self.scanPos = [x*t0delayOpts[self.t0DelayUnits]*2.9979e8*0.5 + self.t0 for x in self.scanPos]
             logging.debug('%s.%s: scanPos: %s' % (className, functionName, self.scanPos))
             self.offset = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':OFFSET').get()
             self.settletime = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':SETTLETIME').get()
