@@ -934,7 +934,7 @@ class ADGrabber():
                 os.makedirs(self.filepath)
         PV(pvPrefix + ':IMAGE:FILEPATH').put(self.filepath)  # Write filepath to PV for "Browse images" button
         
-    def grabImages(self, nImages=0, grabImagesWriteSettingsFlag=1, pause=0.5):
+    def grabImages(self, nImages=0, grabImagesWriteSettingsFlag=0, pause=0.5):
         """Grabs n images from camera."""
         self.nImages = nImages if nImages else self.nImages
         printMsg('Grabbing %d images from %s...' % (self.nImages, self.cameraPvPrefix))
