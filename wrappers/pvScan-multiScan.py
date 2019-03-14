@@ -106,7 +106,8 @@ if filepath_autoset:
         print('Filepath {0} does not exist, defaulting to NFS...'.format(default_filepath))
     else:
         root_filepath = '~'
-    filepath = ('{0}{1}/{2}/{3}/{4}/'.format(root_filepath, sample_name, TODAY, scantype, NOW))
+    filepath = ('{0}{1}/{2}/{3}/{4}/{5}/'.format(root_filepath, exp_name, sample_name, 
+            TODAY, scantype, NOW))
     PV(pv_prefix + ':DATA:FILEPATH').put(filepath)  # Write filepath to PV
 else:
     filepath = PV(pv_prefix + ':DATA:FILEPATH').get(as_string=True)
