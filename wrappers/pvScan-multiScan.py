@@ -44,13 +44,21 @@ n_scans_pv = PV(pv_prefix + ':N_SCANS')
 scan_count_pv = PV(pv_prefix + ':SCAN:COUNT')
 scan_count_pv.put(0)
 run_pv = PV(pv_prefix + ':RUNFLAG')
-expname = PV(pv_prefix + ':EXP:NAME').get(as_string=True)
-sample_name = PV(pv_prefix + ':SCAN:SAMPLE_NAME').get(as_string=True)
+#exp_name = PV(pv_prefix + ':EXP:NAME').get(as_string=True)
+#sample_name = PV(pv_prefix + ':SCAN:SAMPLE_NAME').get(as_string=True)
+exp_name_pv = PV(pv_prefix + ':EXP:NAME')
+sample_name_pv = PV(pv_prefix + ':SCAN:SAMPLE_NAME')
+exp_name_rbv_pv = PV(pv_prefix + ':EXP:NAME_RBV')
+sample_name_rbv_pv = PV(pv_prefix + ':SCAN:SAMPLE_NAME_RBV')
+exp_name_autoget = PV(pv_prefix + ':EXP:NAME_AUTOGET').get()
+if not exp_name_autoget:
+    exp_name = exp_name_pv.get(as_string=True)
+    sample_name = sample_name_pv.get(as_string=True)
+else:
+    exp_name = None
 scantype = PV(pv_prefix + ':SCAN:TYPE').get(as_string=True)
 scan_id_pv = PV(pv_prefix + ':SCAN:ID')
 run_id_pv = PV(pv_prefix + ':RUN:ID')
-run_id = '{0}_{1}'.format(sample_name, NOW)
-run_id_pv.put(run_id)
 elogFlag = PV(pv_prefix + ':ELOG:ENABLE').get()
 
 
@@ -60,6 +68,33 @@ if not n_scans:
 if n_scans is None:
     print('*** Warning: n_scans was None, setting to 1 ***')
     n_scans = 1
+
+# Configure elog
+if elogFlag:
+    username = getpass.getuser()
+    elog = Elog(exp_name, username, password='testfac',
+            url='https://testfac-lgbk.slac.stanford.edu/testfac_operator/')
+    if exp_name_autoget:
+        exp_name = elog.expname
+        sample_name = elog.samplename
+    pvfile = os.environ['NFSHOME'] + '/pvScan/elog/elog_pvlist-' + pv_prefix.replace(':','_')
+    if os.path.isfile(pvfile):
+        with open(pvfile, 'r') as f:
+            pvlist = [line.strip() for line in f if not line.startswith('#')]
+            pvlist = [line for line in pvlist if line]
+    else:
+        pvlist = []
+else:
+    exp_name = exp_name_pv.get(as_string=True)
+    sample_name = sample_name_pv.get(as_string=True)
+
+# Set experiment and sample name
+exp_name_rbv_pv.put(exp_name)
+sample_name_rbv_pv.put(sample_name)
+
+# Set run ID
+run_id = '{0}_{1}'.format(sample_name, NOW)
+run_id_pv.put(run_id)
 
 # Set filepath
 if filepath_autoset:
@@ -76,28 +111,18 @@ if filepath_autoset:
 else:
     filepath = PV(pv_prefix + ':DATA:FILEPATH').get(as_string=True)
 
-# Configure elog
-if elogFlag:
-    username = getpass.getuser()
-    elog = Elog(expname, username, password='testfac',
-            url='https://testfac-lgbk.slac.stanford.edu/testfac_operator/')
-    pvfile = os.environ['NFSHOME'] + '/pvScan/elog/elog_pvlist-' + pv_prefix.replace(':','_')
-    if os.path.isfile(pvfile):
-        with open(pvfile, 'r') as f:
-            pvlist = [line.strip() for line in f if not line.startswith('#')]
-            pvlist = [line for line in pvlist if line]
-    else:
-        pvlist = []
-
 if DEBUG:
     print('+++++ DEBUG info +++++')
     print('pv_prefix: ', pv_prefix)
     print('script: ', script)
+    print('wrapper script: ', sys.argv[0])
     print('filepath: ', filepath)
     print('n_scans: ', n_scans)
-    print('expname: {0}'.format(expname))
+    print('exp_name: {0}'.format(exp_name))
     print('sample_name: {0}'.format(sample_name))
     print('run ID: {0}'.format(run_id))
+    print('Auto elog: {0}'.format(elogFlag))
+    print('Autoget exp name: {0}'.format(exp_name_autoget))
     if elogFlag:
         print('username: {0}'.format(username))
     print('++++++++++++++++++++++')
@@ -139,7 +164,7 @@ elif n_scans > 1:
                 if DEBUG: print('filepath_new:', filepath_new)
                 filepath_pv.put(filepath_new + '\0')
                 scan_count_pv.put(i+1)
-                scan_id_pv.put('{0}_{1}_{2:03}'.format(expname, NOW, i+1))
+                scan_id_pv.put('{0}_{1}_{2:03}'.format(exp_name, NOW, i+1))
                 sleep(0.5)
                 subprocess.call([script, pv_prefix])
                 print('')
