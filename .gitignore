@@ -10,4 +10,12 @@ testScanPvClass.py
 *.new
 pvscan3.py
 *.py~
+modules/elog2.py
+modules/pvscan.py.new.20181029
+modules/pvscan2.py
+modules/pvscan2_sep.py
+modules/pvtypes.py
+nlcta/pvScan-nlcta-2pv.py.20181029
+wrappers/pvScan-multiScan2.py
+wrappers/pvScan-multiScan3.py
 
