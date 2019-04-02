@@ -295,6 +295,8 @@ class BasePv(PV):
             self.randomScanflag = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':RANDSCAN').get()
             self.t0Enable = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':T0_ENABLE').get()
             self.t0 = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':T0').get()
+            self.t0Direction = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':T0_DIRECTION').get()
+            t0Sign = -1 if self.t0Direction else 1
             self.t0DelayUnits = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) 
                     + ':T0_DELAYUNITS').get(as_string=True)
             # This dict must match the T0_DELAYUNITS epics record:
@@ -311,7 +313,7 @@ class BasePv(PV):
                 # The factor of 2 is for a 2-pass delay stage.
                 # The factor of 1e3 is because the stage units are assumed to be mm.
                 scaleFactor = t0delayOpts[self.t0DelayUnits]*2.9979e8*0.5*1e3
-                self.scanPos = [x*scaleFactor + self.t0 for x in self.scanPos]
+                self.scanPos = [self.t0 + t0Sign*x*scaleFactor for x in self.scanPos]
             logging.debug('%s.%s: scanPos: %s' % (className, functionName, self.scanPos))
             self.offset = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':OFFSET').get()
             self.settletime = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':SETTLETIME').get()
