@@ -20,41 +20,40 @@ msgPv.put('Aborting...')
 print 'Aborting...'
 
 # Import pvScan module
-sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/prod/modules/')
-import pvscan2
-pvscan2.loggingConfig('abort script')
+sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/dev/modules/')
+import pvscan
 
 # Get PID PV
-pid=pvscan2.pidPV.get()
+pid=pvscan.pidPV.get()
 
 # For stopping the wrapper script
 runFlagPv=PV(pvPrefix + ':RUNFLAG')
 
-exp = pvscan2.Experiment(npvs=2, nshutters=3, log=False, createDirs=False)
+exp = pvscan.Experiment(npvs=2, nshutters=3, log=False, createDirs=False)
 
 ##################################################################################################################            
 def abortRoutine():
     "This is the abort routine"
     # Kill scan routine process
-    pvscan2.printMsg('Killing process %d...' % (pid))
+    pvscan.printMsg('Killing process %d...' % (pid))
     os.kill(pid, signal.SIGKILL)
     # Stop the wrapper script
-    pvscan2.printMsg('Stopping wrapper script')
+    pvscan.printMsg('Stopping wrapper script')
     runFlagPv.put(0)
     # Stop move(s)
-    pvscan2.printMsg('Stopping move(s)')
+    pvscan.printMsg('Stopping scan')
     try:
         for pv in exp.scanpvs:
-            pv.abort()
+            pv.abort.put(1)
     except AttributeError:
         'Warning: abortRoutine: AttributeError'
     # Shutters
-    pvscan2.printMsg('Returning shutters to initial state')
+    pvscan.printMsg('Returning shutters to initial state')
     for shutter in exp.shutters:
         shutter.open.put(1) if shutter.initial.get() == 1 else shutter.close.put(0)
-    pvscan2.printMsg('Aborting image grabbing')
+    pvscan.printMsg('Aborting image grabbing')
     exp.grabber.abort()
-    pvscan2.printMsg('Aborted')
+    pvscan.printMsg('Aborted')
 
 
 if __name__ == "__main__":
