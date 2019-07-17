@@ -1246,8 +1246,6 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutters=None):
                         runUserScript()
                     if grabObject:
                         if grabObject.grabFlag:
-                            if stepCount1 == 1 and stepCount2 == 1:
-                                grabObject._waitForNewImage()
                             if grabObject.stepFlag:
                                 grabObject.filenameExtras = ('_{0}-{1:03d}-{2:0{6}.{7}f}_{3}-{4:03d}-{5:0{8}.{9}f}'
                                         .format(pv1.desc, stepCount1, pv1.get(), pv2.desc, stepCount2,
@@ -1282,8 +1280,6 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutters=None):
                     runUserScript()
                 if grabObject:
                     if grabObject.grabFlag:
-                        if stepCount1 == 1 and exp.scanmode != 2:
-                            grabObject._waitForNewImage()
                         if grabObject.stepFlag:
                             grabObject.filenameExtras = ('_{0}-{1:03d}-{2:0{3}.{4}f}'
                                     .format(pv1.desc, stepCount1, pv1.get(),
@@ -1328,7 +1324,6 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutters=None):
             runUserScript()
         if grabObject:
             if grabObject.grabFlag:
-                grabObject._waitForNewImage()
                 if grabObject.grabSeq2Flag:
                     pumpedGrabSequence(grabObject, shutter1, shutter2, shutter3)
                 grabObject.grabImages()
