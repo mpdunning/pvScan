@@ -21,17 +21,17 @@ msgPv.put('Initializing scan...')
 print('Initializing scan...')
 
 # Import pvScan module
-sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/prod/modules/')
-import pvscan2
+sys.path.append('/afs/slac/g/testfac/extras/scripts/pvScan/dev/modules/')
+import pvscan
 
 # Configure logging
-pvscan2.loggingConfig()
+pvscan.loggingConfig()
 
 # For thread-safe printing
 print_lock = threading.Lock()
 
 # Set up a scan with 2 Scan PVs, 3 shutters
-exp = pvscan2.Experiment(npvs=2, nshutters=3, mutex=print_lock)
+exp = pvscan.Experiment(npvs=2, nshutters=3, mutex=print_lock)
 
 # Add extra monitor PVs here.  Yuo can also add them to the "Monitor PV list" in the GUI.
 # For example: 
@@ -42,11 +42,11 @@ exp = pvscan2.Experiment(npvs=2, nshutters=3, mutex=print_lock)
 def scanRoutine():
     "This is the scan routine"
     # Print scan info
-    pvscan2.printScanInfo(exp, exp.scanpvs)
-    pvscan2.printMsg('Starting')
+    pvscan.printScanInfo(exp, exp.scanpvs)
+    pvscan.printMsg('Starting')
     sleep(0.5) # Collect some initial data first
     # Scan delay stage and grab images...
-    pvscan2.pvNDScan(exp, exp.scanpvs, exp.grabber, exp.shutters)
+    pvscan.pvNDScan(exp, exp.scanpvs, exp.grabber, exp.shutters)
 
 ### Main program ##########################################################3
 if __name__ == "__main__":
@@ -60,14 +60,14 @@ if __name__ == "__main__":
             show_usage()
             sys.exit(1)
         pid = os.getpid()
-        pvscan2.pidPV.put(pid)
+        pvscan.pidPV.put(pid)
         if exp.dataLog.dataEnable:
             # Start logging data
             exp.dataLog.start()
         # Do scan
         scanRoutine()
         sleep(0.5) # Log data for a little longer
-        pvscan2.printMsg('Done')
+        pvscan.printMsg('Done')
     finally:
         # Stop logging data
         exp.dataLog.stop()
