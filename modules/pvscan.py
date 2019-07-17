@@ -901,7 +901,9 @@ class ADGrabber():
         #self.grabImagesAcquireRBVPv.put(self.acquireRBVPv.pvname + ' CPP')
         self.imageModePv = PV(cameraPvPrefix + ':cam1:ImageMode')
         self.numExposuresPv = PV(cameraPvPrefix + ':cam1:NumExposures')
-        self.arrayCounterPv = PV(cameraPvPrefix + ':cam1:ArrayCounter_RBV')
+        self.arrayCounterPv = PV(cameraPvPrefix + ':cam1:ArrayCounter')
+        self.arrayCounterRBVPv = PV(cameraPvPrefix + ':cam1:ArrayCounter_RBV')
+        self.imagesPerAcqPv = PV(cameraPvPrefix + ':cam1:NumImages')
         self.lastImagePv = PV(self.imagePvPrefix + ':FullFileName_RBV')
         self.writingRBVPv = PV(self.imagePvPrefix + ':WriteFile_RBV.RVAL')
         self.timestampRBVPv = PV(self.imagePvPrefix + ':TimeStamp_RBV')
@@ -940,6 +942,8 @@ class ADGrabber():
         
     def grabImages(self, nImages=0, grabImagesWriteSettingsFlag=0, pause=0.5):
         """Grabs n images from camera."""
+        functionName = 'grabImages'
+        logging.debug('%s: captureMode: %s' % (functionName, self.captureMode))
         self.nImages = nImages if nImages else self.nImages
         printMsg('Grabbing %d images from %s...' % (self.nImages, self.cameraPvPrefix))
         PV(self.imagePvPrefix + ':EnableCallbacks').put(1)
@@ -955,6 +959,8 @@ class ADGrabber():
             self._bufferedCapture()
         elif self.captureMode == 2:
             self._CBACapture()
+        elif self.captureMode == 3:
+            self._multipleCapture()
         else:
             self._individualCapture()
         if grabImagesWriteSettingsFlag:
@@ -964,18 +970,19 @@ class ADGrabber():
         printSleep(pause, string='Grabbed %d images from %s: Pausing' % 
                   (self.nImages, self.cameraPvPrefix))
             
-    def _setAcquire(self):
+    def _setAcquire(self, retry=True):
         """Starts camera acquisition if not already acquiring."""
         functionName = '_setAcquire'
         logging.debug('%s: acquiring: %s' % (functionName, self.acquireRBVPv.get()))
         if not self.acquireRBVPv.get(): # If camera is not acquiring...
             logging.debug('%s: turning acquisition on' % (functionName))
             self.acquirePv.put(1) # Try to turn acquisition on
-            sleep(1.0) # Give camera time to turn on...
-            if not self.acquireRBVPv.get():
-                # If unable to acquire, raise exception & quit
-                printMsg('Failed: Camera not acquiring')
-                raise ValueError('Camera not acquiring')
+            if retry:
+                sleep(1.0) # Give camera time to turn on...
+                if not self.acquireRBVPv.get():
+                    # If unable to acquire, raise exception & quit
+                    printMsg('Failed: Camera not acquiring')
+                    raise ValueError('Camera not acquiring')
 
     def stopAcquire(self):
         """Stops camera acquisition."""
@@ -999,32 +1006,34 @@ class ADGrabber():
 
     def _writeTiffTags(self):
         """Timestamps image file names with tiff tags."""
-        printMsg('Timestamping filenames from Tiff tags...')
+        functionName = '_writeTiffTags'
+        printMsg('Timestamping {0} filenames from Tiff tags...'.format(len(self.imageFilepaths)))
         for filepath in self.imageFilepaths:
-            if os.path.exists(filepath):
-                try:
-                    im = Image.open(filepath)
-                    timestampTag = im.tag[65000][0]
-                    timestampEpicsSecTag = im.tag[65002][0]
-                    timestampEpicsNsecTag = im.tag[65003][0]
-                    timestampFromEpics = (datetime.datetime.fromtimestamp(631152000 + 
-                            timestampEpicsSecTag + 
-                            1e-9*timestampEpicsNsecTag).strftime('%Y%m%d_%H%M%S.%f'))
-                    filename = filepath.split('/')[-1]
-                    filenameNew = (self.fileNamePrefix + self.filenameExtras + 
-                            '_' + str(timestampFromEpics) + '_' + str(timestampTag) + 
-                            '_' + filename.split('_')[-1])
-                    os.rename(filepath, filepath.replace(filename, filenameNew))
-                    print('%s --> %s' %(filename, filenameNew))
-                except IOError:
-                    print('writeTiffTags: IOError')
-                except NameError:
-                    print('writeTiffTags: PIL not installed')
+            try:
+                im = Image.open(filepath)
+                timestampTag = im.tag[65000][0]
+                timestampEpicsSecTag = im.tag[65002][0]
+                timestampEpicsNsecTag = im.tag[65003][0]
+                timestampFromEpics = (datetime.datetime.fromtimestamp(631152000 + 
+                        timestampEpicsSecTag + 
+                        1e-9*timestampEpicsNsecTag).strftime('%Y%m%d_%H%M%S.%f'))
+                filename = filepath.split('/')[-1]
+                filenameNew = (self.fileNamePrefix + self.filenameExtras + 
+                        '_' + str(timestampFromEpics) + '_' + str(timestampTag) + 
+                        '_' + filename.split('_')[-1])
+                os.rename(filepath, filepath.replace(filename, filenameNew))
+                logging.debug('{0}: {1} --> {2}'.format(functionName, filename, filenameNew))
+            except IOError as e:
+                print('{0}: {1}'.format(functionName, e))
+            except NameError as e:
+                print('{0}: {1}'.format(functionName, e))
 
     def _bufferedCapture(self):
         """Capture images in AD buffered mode."""
         functionName = '_bufferedCapture'
         logging.debug('%s' % (functionName))
+        # Set Image Mode to "Continuous"
+        self.imageModePv.put(2)
         # Turn acquisition on:
         self._setAcquire()
         self.numCapturePv.put(self.nImages)
@@ -1042,11 +1051,14 @@ class ADGrabber():
                     self.filenameExtras, n+1, self.fileExt)) for n in range(self.nImages)])
         while self.captureRBVPv.get() or self.writingRBVPv.get():
             sleep(0.05)
+        logging.debug('%s: Done capturing' % (functionName))
 
     def _individualCapture(self):
         """Capture images in AD individual mode."""
         functionName = '_individualCapture'
         logging.debug('%s' % (functionName))
+        # Set Image Mode to "Continuous"
+        self.imageModePv.put(2)
         self._setAcquire() # Turn acquisition on
         self.numCapturePv.put(1)
         if self.waitForNewImageFlag:
@@ -1063,6 +1075,7 @@ class ADGrabber():
             if self.writeTiffTagsFlag:
                 sleep(0.010)
                 self.imageFilepaths.append(self.lastImagePv.get(as_string=True))
+        logging.debug('%s: Done capturing' % (functionName))
 
     def _CBACapture(self):
         """Capture images one at a time by enabling capture, turning on acquisition, 
@@ -1097,18 +1110,55 @@ class ADGrabber():
                 sleep(0.010)
                 self.imageFilepaths.append(self.lastImagePv.get(as_string=True))
         self.imageModePv.put(imageMode0)  # Set image mode back
+        logging.debug('%s: Done capturing' % (functionName))
+
+    def _multipleCapture(self):
+        """Capture images using AD Image Mode = Multiple."""
+        functionName = '_multipleCapture'
+        logging.debug('%s' % (functionName))
+        # If we're acquiring, stop now
+        if self.acquireRBVPv.get():
+            self.stopAcquire()
+            sleep(0.1)
+        # Reset Array Counter
+        self.arrayCounterPv.put(0)
+        # Set Image Mode to "Multiple"
+        self.imageModePv.put(1)
+        # Set n images to capture
+        self.numCapturePv.put(self.nImages)
+        self.imagesPerAcqPv.put(self.nImages)
+        # Set QueueSize equal to the number of images:
+        self.queueSizePv.put(self.nImages)
+        imageFilenameTemplate = '%s%s_%4.4d' + self.fileExt
+        self.templatePv.put(imageFilenameTemplate + '\0')
+        if self.waitForNewImageFlag:
+            self._waitForNewImage()
+        logging.debug('%s: capturing, QueueSize=%s' % (functionName, self.nImages))
+        self.capturePv.put(1, wait=False)
+        sleep(0.1)
+        # Turn acquisition on:
+        self._setAcquire(retry=False)
+        # Build a list of filenames for (optional) tiff tag file naming
+        if self.writeTiffTagsFlag:
+            self.imageFilepaths = ([('%s%s%s_%04d%s' % (self.filepath, self.fileNamePrefix, 
+                    self.filenameExtras, n+1, self.fileExt)) for n in range(self.nImages)])
+        while self.arrayCounterRBVPv.get() < self.nImages:
+            sleep(0.05)
+        while self.captureRBVPv.get() or self.writingRBVPv.get() or self.acquireRBVPv.get():
+            sleep(0.05)
+        logging.debug('%s: Done capturing' % (functionName))
 
     def _waitForNewImage(self):
         """Waits for ArrayCounter to increment."""
         functionName = '_waitForNewImage'
         msg = msgPv.get(as_string=True)
         self._setAcquire()
-        if self.arrayCounterPv:
-            arrayCount0 = self.arrayCounterPv.get()
+        if self.arrayCounterRBVPv:
+            arrayCount0 = self.arrayCounterRBVPv.get()
             logging.debug('%s: arrayCount0: %s' % (functionName, arrayCount0))
             if arrayCount0 is not None:
                 printMsg('Waiting for new image...')
-                while self.arrayCounterPv.get() == arrayCount0:
+                while self.arrayCounterRBVPv.get() == arrayCount0:
                     sleep(0.05)
         msgPv.put(msg)
 
