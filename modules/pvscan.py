@@ -1147,6 +1147,8 @@ class ADGrabber():
         while self.captureRBVPv.get() or self.writingRBVPv.get() or self.acquireRBVPv.get():
             sleep(0.05)
         logging.debug('%s: Done capturing' % (functionName))
+        # Set Image Mode back to "Continuous" so that camera continues to function as expected
+        self.imageModePv.put(2)
 
     def _waitForNewImage(self):
         """Waits for ArrayCounter to increment."""
