@@ -114,20 +114,21 @@ if __name__ == "__main__":
     requiredNamed.add_argument("--password", help="The operator password", required=True)
     parser.add_argument("--experiment", help="The name of the experiment")
     parser.add_argument("--url", help="URL to post to; this is only the prefix. \
-            For example, https://testfac-lgbk.slac.stanford.edu/testfac_operator/",
-            default="https://testfac-lgbk.slac.stanford.edu/testfac_operator/")
+            For example, https://pswww.slac.stanford.edu/ws-auth/uedlgbk/",
+            default="https://pswww.slac.stanford.edu/ws-auth/uedlgbk/")
     args = parser.parse_args()
 
-    #pvlist = ['GUN:AS01:1:3:S_PA', 'KLYS:AS01:K1:1:WACTUAL', 'KLYS:AS01:K1:3:WACTUAL', 'ASTA:PV04:SCAN:ID']
-    pvlist = ['ASTA:AO:BK05:V0079', 'ASTA:AO:BK05:V0080']
+    pvlist = ['ASTA:PV04:DATE_TIME', 'ASTA:AO:BK05:V0080', 'ASTA:PV04:DATA:FILEPATH']
     elog = Elog(args.experiment, args.user, args.password, args.url)
-    print('Creating elog entry...')
     try:
+        print('Creating elog entry...')
         elog.start()
         elog.add_params(pvnamelist=pvlist)
         print('Experiment name: {0}, Sample name: {1}'.format(elog.expname, elog.samplename))
+        sleep(2.0) # Simulate some work
     finally:
         elog.end()
+        print('Done creating elog entry.')
     
     sys.exit(0)
     

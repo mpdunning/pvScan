@@ -73,7 +73,7 @@ if n_scans is None:
 if elogFlag:
     username = getpass.getuser()
     elog = Elog(exp_name, username, password='testfac',
-            url='https://testfac-lgbk.slac.stanford.edu/testfac_operator/')
+            url='https://pswww.slac.stanford.edu/ws-auth/uedlgbk/')
     if exp_name_autoget:
         exp_name = elog.expname
         sample_name = elog.samplename
