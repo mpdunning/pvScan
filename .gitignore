@@ -3,6 +3,8 @@
 *.swx
 *.swn
 *.swo
+*.swp
+.__afs*
 testEpicsMotorClass.py
 testMyMotorClass.py
 testScanPvClass.py

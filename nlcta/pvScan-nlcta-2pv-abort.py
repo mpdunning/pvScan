@@ -29,7 +29,7 @@ pid=pvscan.pidPV.get()
 # For stopping the wrapper script
 runFlagPv=PV(pvPrefix + ':RUNFLAG')
 
-exp = pvscan.Experiment(npvs=2, nshutters=3, log=False, createDirs=False)
+exp = pvscan.Experiment(npvs=2, nshutters=3, abortFlag=True)
 
 ##################################################################################################################            
 def abortRoutine():
@@ -50,7 +50,7 @@ def abortRoutine():
     # Shutters
     pvscan.printMsg('Returning shutters to initial state')
     for shutter in exp.shutters:
-        shutter.open.put(1) if shutter.initial.get() == 1 else shutter.close.put(0)
+        shutter.abort()
     pvscan.printMsg('Aborting image grabbing')
     exp.grabber.abort()
     pvscan.printMsg('Aborted')

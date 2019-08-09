@@ -67,10 +67,11 @@ NOW = timestamp('s')
 class Experiment:
     """Set experiment name, filepath, and scan mode."""
     def __init__(self, npvs=None, nshutters=None, expname=None, filepath=None, 
-            scanname=None, mutex=None, log=True, createDirs=True):
+            scanname=None, mutex=None, log=True, createDirs=True, abortFlag=False):
         self.className = self.__class__.__name__
         functionName = '__init__'
         logging.info('%s.%s' % (self.className, functionName))
+        logging.debug('{0}.{1}: abort = {2}'.format(self.className, functionName, abortFlag))
         if expname is None:
             expname = PV(pvPrefix + ':SCAN:SAMPLE_NAME').get()
         if ' ' in expname: expname = expname.replace(' ', '_')
@@ -78,6 +79,10 @@ class Experiment:
             scanname = PV(pvPrefix + ':SCAN:NAME').get()
         if ' ' in scanname: scanname = scanname.replace(' ', '_')
         if scanname: scanname = '_' + scanname
+        if abortFlag:
+            log = False
+            createDirs = False
+        self.abortFlag = abortFlag
         self.mutex = mutex
         self.dataFlag = PV(pvPrefix + ':DATA:ENABLE').get()
         self.logFlag = PV(pvPrefix + ':LOG:ENABLE').get()
@@ -199,8 +204,8 @@ class Experiment:
         else:
             shutters = None
         logging.debug('%s: %s: shutters: %s' % (self.className, functionName, shutters))
-        # Get initial states of shutters
-        if shutters:
+        # Get initial states of shutters, unless we're aborting
+        if shutters and not self.abortFlag:
             [shutter.initial.put(shutter.OCStatus.get()) for shutter in shutters]
             for shutter in shutters:
                 logging.debug('%s: %s: shutter %s inital state: %s' 
@@ -226,9 +231,9 @@ class Experiment:
         if cameraPvPrefix is None:
             cameraPvPrefix = PV(pvPrefix + ':GRABIMAGES:CAMERA').get(as_string=True)
         if 'DirectD' in cameraPvPrefix:
-            grabber = DDGrabber(cameraPvPrefix, expname=self.expname)
+            grabber = DDGrabber(cameraPvPrefix, expname=self.expname, abortFlag=self.abortFlag)
         else:
-            grabber = ADGrabber(cameraPvPrefix=cameraPvPrefix, filepath=self.filepath)
+            grabber = ADGrabber(cameraPvPrefix=cameraPvPrefix, filepath=self.filepath, abortFlag=self.abortFlag)
             if self.createDirs:
                 grabber._create_image_filepath()
         self.imagepvs = [grabber.timestampRBVPv, grabber.captureRBVPv]
@@ -501,7 +506,7 @@ class RbvPv(BasePv):
 
 class Shutter(PV):
     """Shutter class which inherits from pyEpics PV class."""
-    def __init__(self, pvname, rbvpv=None, number=0):
+    def __init__(self, pvname, rbvpv=None, number=0, abortFlag=False):
         PV.__init__(self, pvname)
         self.rbv = PV(rbvpv) if rbvpv else None
         if number:
@@ -509,6 +514,8 @@ class Shutter(PV):
             self.enabled = PV(pvPrefix + ':SHUTTER' + str(number) + ':ENABLE').get()
             self.initial = PV(pvPrefix + ':SHUTTER' + str(number) + ':INITIAL')
         self.number = number
+        self.open = PV(pvname)
+        self.close = PV(pvname)
     
     def openCheck(self, val=0.5):
         sleep(0.2)
@@ -531,6 +538,9 @@ class Shutter(PV):
             msg = 'Failed shutter check: shutter %s' % (self.number)
             printMsg(msg)
             raise ShutterError(msg)
+
+    def abort(self):
+        self.open.put(1) if self.initial.get() == 1 else self.close.put(0)
                 
 
 class DummyShutter(Shutter):
@@ -540,8 +550,6 @@ class DummyShutter(Shutter):
         self.OCStatus = PV(pvname)
         self.ttlInEnable = PV(pvname)
         self.ttlInDisable = PV(pvname)
-        self.open = PV(pvname)
-        self.close = PV(pvname)
         self.soft = PV(pvname)
         self.fast = PV(pvname)
 
@@ -788,7 +796,7 @@ class DataLogger(Thread):
 
 class DDGrabber():
     """UED Direct Detector grabber."""
-    def __init__(self, cameraPvPrefix, expname=None):
+    def __init__(self, cameraPvPrefix, expname=None, abortFlag=False):
         className = self.__class__.__name__
         functionName = '__init__'
         logging.info('%s.%s' % (className, functionName))
@@ -849,7 +857,7 @@ class DDGrabber():
 class ADGrabber():
     """AreaDetector grabber."""
     def __init__(self, cameraPvPrefix=None, filepath=None, nImages=None, 
-                 pvlist=None, plugin='TIFF1'):
+                 pvlist=None, plugin='TIFF1', abortFlag=False):
         className = self.__class__.__name__
         functionName = '__init__'
         logging.info('%s.%s' % (className, functionName))
@@ -880,6 +888,7 @@ class ADGrabber():
         filepath += 'images' + '-' + cameraPvPrefix + '/' 
         self.scanmode = PV(pvPrefix + ':SCAN:MODE').get()
         self.grabFlag = PV(pvPrefix + ':GRABIMAGES:ENABLE').get()
+        self.imageModeInitialPv = PV(pvPrefix + ':GRABIMAGES:IMAGEMODE_INITIAL')
         if plugin == 'TIFF1':
             fileExt = '.tif'
         elif plugin == 'JPEG1':
@@ -887,8 +896,6 @@ class ADGrabber():
         else:
             fileExt = '.img'
         self.imagePvPrefix = cameraPvPrefix + ':' + plugin
-        #self.grabImagesRatePv = PV(pvPrefix + ':GRABIMAGES:RATE.INP')
-        #self.grabImagesRatePv.put(self.imagePvPrefix + ':ArrayRate_RBV CPP')
         self.numCapturePv = PV(self.imagePvPrefix + ':NumCapture')
         self.templatePv = PV(self.imagePvPrefix + ':FileTemplate')
         self.capturePv = PV(self.imagePvPrefix + ':Capture')
@@ -897,9 +904,15 @@ class ADGrabber():
         self.grabImagesCaptureRBVPv.put(self.captureRBVPv.pvname + ' CPP')
         self.acquirePv = PV(cameraPvPrefix + ':cam1:Acquire')
         self.acquireRBVPv = PV(cameraPvPrefix + ':cam1:Acquire_RBV.RVAL')
-        #self.grabImagesAcquireRBVPv = PV(pvPrefix + ':GRABIMAGES:ACQUIRE_RBV.INP')
-        #self.grabImagesAcquireRBVPv.put(self.acquireRBVPv.pvname + ' CPP')
         self.imageModePv = PV(cameraPvPrefix + ':cam1:ImageMode')
+        self.imageModeRBVPv = PV(cameraPvPrefix + ':cam1:ImageMode_RBV')
+        # Get initial image mode for abort routine
+        self.imageModeInitial = self.imageModeRBVPv.get()
+        logging.debug('{0}.{1}: Initial image mode: {2}'.format(className, functionName, 
+                self.imageModeInitial))
+        # Don't set initial image mode if we're aborting
+        if not abortFlag:
+            self.imageModeInitialPv.put(self.imageModeInitial)
         self.numExposuresPv = PV(cameraPvPrefix + ':cam1:NumExposures')
         self.arrayCounterPv = PV(cameraPvPrefix + ':cam1:ArrayCounter')
         self.arrayCounterRBVPv = PV(cameraPvPrefix + ':cam1:ArrayCounter_RBV')
@@ -1122,6 +1135,8 @@ class ADGrabber():
             sleep(0.1)
         # Reset Array Counter
         self.arrayCounterPv.put(0)
+        # Get initial image mode
+        imageMode0 = self.imageModeRBVPv.get()
         # Set Image Mode to "Multiple"
         self.imageModePv.put(1)
         # Set n images to capture
@@ -1147,8 +1162,8 @@ class ADGrabber():
         while self.captureRBVPv.get() or self.writingRBVPv.get() or self.acquireRBVPv.get():
             sleep(0.05)
         logging.debug('%s: Done capturing' % (functionName))
-        # Set Image Mode back to "Continuous" so that camera continues to function as expected
-        self.imageModePv.put(2)
+        # Set Image Mode back to initial
+        self.imageModePv.put(imageMode0)
 
     def _waitForNewImage(self):
         """Waits for ArrayCounter to increment."""
@@ -1167,6 +1182,8 @@ class ADGrabber():
     def abort(self):
         """Abort image capturing."""
         self.capturePv.put(0)
+        self.imageModePv.put(self.imageModeInitialPv.get())
+        self._setAcquire()
 
 
 class Error(Exception):
