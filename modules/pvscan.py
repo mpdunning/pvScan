@@ -889,6 +889,7 @@ class ADGrabber():
         self.scanmode = PV(pvPrefix + ':SCAN:MODE').get()
         self.grabFlag = PV(pvPrefix + ':GRABIMAGES:ENABLE').get()
         self.imageModeInitialPv = PV(pvPrefix + ':GRABIMAGES:IMAGEMODE_INITIAL')
+        self.acquiringInitialPv = PV(pvPrefix + ':GRABIMAGES:ACQUIRING_INITIAL')
         if plugin == 'TIFF1':
             fileExt = '.tif'
         elif plugin == 'JPEG1':
@@ -908,11 +909,13 @@ class ADGrabber():
         self.imageModeRBVPv = PV(cameraPvPrefix + ':cam1:ImageMode_RBV')
         # Get initial image mode for abort routine
         self.imageModeInitial = self.imageModeRBVPv.get()
+        self.acquiringInitial = self.acquireRBVPv.get()
         logging.debug('{0}.{1}: Initial image mode: {2}'.format(className, functionName, 
                 self.imageModeInitial))
         # Don't set initial image mode if we're aborting
         if not abortFlag:
             self.imageModeInitialPv.put(self.imageModeInitial)
+            self.acquiringInitialPv.put(self.acquiringInitial)
         self.numExposuresPv = PV(cameraPvPrefix + ':cam1:NumExposures')
         self.arrayCounterPv = PV(cameraPvPrefix + ':cam1:ArrayCounter')
         self.arrayCounterRBVPv = PV(cameraPvPrefix + ':cam1:ArrayCounter_RBV')
@@ -1183,7 +1186,10 @@ class ADGrabber():
         """Abort image capturing."""
         self.capturePv.put(0)
         self.imageModePv.put(self.imageModeInitialPv.get())
-        self._setAcquire()
+        self.stopAcquire()
+        sleep(0.15)
+        if self.acquiringInitialPv.get():
+            self._setAcquire()
 
 
 class Error(Exception):
