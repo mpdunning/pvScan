@@ -1049,7 +1049,9 @@ class ADGrabber():
         functionName = '_bufferedCapture'
         logging.debug('%s' % (functionName))
         # Set Image Mode to "Continuous"
-        self.imageModePv.put(2)
+        if self.imageModeRBVPv.get() != 2:
+            self.stopAcquire()
+            self.imageModePv.put(2)
         # Turn acquisition on:
         self._setAcquire()
         self.numCapturePv.put(self.nImages)
@@ -1074,7 +1076,9 @@ class ADGrabber():
         functionName = '_individualCapture'
         logging.debug('%s' % (functionName))
         # Set Image Mode to "Continuous"
-        self.imageModePv.put(2)
+        if self.imageModeRBVPv.get() != 2:
+            self.stopAcquire()
+            self.imageModePv.put(2)
         self._setAcquire() # Turn acquisition on
         self.numCapturePv.put(1)
         if self.waitForNewImageFlag:
@@ -1185,8 +1189,8 @@ class ADGrabber():
     def abort(self):
         """Abort image capturing."""
         self.capturePv.put(0)
-        self.imageModePv.put(self.imageModeInitialPv.get())
         self.stopAcquire()
+        self.imageModePv.put(self.imageModeInitialPv.get())
         sleep(0.15)
         if self.acquiringInitialPv.get():
             self._setAcquire()

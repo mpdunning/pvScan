@@ -1,5 +1,8 @@
 # Release notes for pvScan
 
+R3.5.5 10/16/2019 mdunning
+    - Add check before changing image mode
+
 R3.5.4 8/9/2019 mdunning
     - Recover initial acquire state and image mode on abort
 
