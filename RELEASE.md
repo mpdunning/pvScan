@@ -1,5 +1,9 @@
 # Release notes for pvScan
 
+R3.5.6 11/25/2019 mdunning
+    - Add uniblitz shutter
+    - Add new scan position mode, merge with random mode
+
 R3.5.5 10/16/2019 mdunning
     - Add check before changing image mode
 

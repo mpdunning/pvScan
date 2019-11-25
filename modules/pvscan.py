@@ -199,6 +199,8 @@ class Experiment:
                     shutters.append(LSCShutter(pvname, rbv, i+1))
                 elif shuttertype == 3:
                     shutters.append(ThorSCShutter(pvname, rbv, i+1))
+                elif shuttertype == 4:
+                    shutters.append(UniblitzShutter(pvname, rbv, i+1))
                 else:
                     logging.warning('%s: shutter type: %s' % (functionName, shuttertype))
         else:
@@ -298,6 +300,10 @@ class BasePv(PV):
             self.nsteps = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':NSTEPS').get()
             self.inc = (self.stop - self.start)/(self.nsteps - 1)
             self.randomScanflag = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':RANDSCAN').get()
+            self.scanPosModePv = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':ScanPosMode')
+            self.scanPosMode = self.scanPosModePv.get()
+            self.ScanPosNumIter = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':ScanPosNumIter').get()
+            self.numStepsTotalPv = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':NumStepsTotal')
             self.filenameWidth = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':FILENAME_WIDTH').get()
             self.filenamePrec = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':FILENAME_PREC').get()
             self.t0Enable = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':T0_ENABLE').get()
@@ -308,11 +314,12 @@ class BasePv(PV):
                     + ':T0_DELAYUNITS').get(as_string=True)
             # This dict must match the T0_DELAYUNITS epics record:
             t0delayOpts = {'us':1e-6, 'ns':1e-9, 'ps':1e-12, 'fs':1e-15, 'as':1e-18}
-            # Do random scan if enabled from PV
-            if self.randomScanflag:
-                self.randValStr = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) 
-                        + ':RAND_VALS').get(as_string=True)
-                self.scanPos = self._shuffleString(self.randValStr)
+            # Build list of scan positions based on scanPosMode
+            if self.scanPosMode:
+                self.scanPosString = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) 
+                        + ':ScanPosString').get(as_string=True)
+                self.scanPos = self._buildScanPositions(self.scanPosMode, self.ScanPosNumIter, 
+                        self.scanPosString)
             else:
                 self.scanPos = np.linspace(self.start, self.stop, num=self.nsteps)
             if self.t0Enable:
@@ -322,6 +329,7 @@ class BasePv(PV):
                 scaleFactor = t0delayOpts[self.t0DelayUnits]*2.9979e8*0.5*1e3
                 self.scanPos = [self.t0 + t0Sign*x*scaleFactor for x in self.scanPos]
             logging.debug('%s.%s: scanPos: %s' % (className, functionName, self.scanPos))
+            self.numStepsTotalPv.put(len(self.scanPos))
             self.offset = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':OFFSET').get()
             self.settletime = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':SETTLETIME').get()
             self.delta = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':DELTA').get()
@@ -329,6 +337,7 @@ class BasePv(PV):
             self.pre_stop = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':PRE_STOP').get()
             self.pre_nsteps = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':PRE_NSTEPS').get()
             self.stepCountPv = PV(pvPrefix + ':SCANPV' + str(self.pvnumber) + ':STEPCOUNT')
+            if not self.abort: self.stepCountPv.put(0)
         else:
             self.delta = None
         # Test for PV validity:
@@ -357,8 +366,9 @@ class BasePv(PV):
                 delta = self.delta
             self.pvWait(val, delta, timeout)
 
-    def _shuffleString(self, strng):
-        """Shuffle a string of values into a random list of floats.
+    def _buildScanPositions(self, mode, numIter, strng):
+        """Build a list of values from a string and optionally
+        perform a sorting  and/or multiplication operation on the list.
         Comma, semicolon, and whitespace delimiters recognized, 
         as well as start:step:stop ranges."""
         lst = re.split(r'[;,\s]\s*', strng)
@@ -366,7 +376,15 @@ class BasePv(PV):
         lst = [expandRange(rangePat.search(x).group(0)) if rangePat.search(x) else x for x in lst]
         lst = flattenList(lst)
         lst = [float(x) for x in lst if isNumber(x)]
-        random.shuffle(lst)
+        if mode == 1:
+            pass  # No need to do anything
+        elif mode == 2:
+            random.shuffle(lst)
+        elif mode == 3:
+            lst += reversed(lst)
+        elif mode == 4:
+            lst.reverse()
+        lst *= numIter
         return lst
 
  
@@ -578,6 +596,20 @@ class ThorSCShutter(Shutter):
         self.close = PV(':'.join(pvname.split(':')[0:2]) + ':SHUTTER:CLOSE')
         self.trigOutMode = PV(':'.join(pvname.split(':')[0:2]) + ':TRIG:OUT_MODE')
         self.outputMode = PV(':'.join(pvname.split(':')[0:2]) + ':SHUTTER:OUT_MODE')
+
+class UniblitzShutter(Shutter):
+    """Uniblitz shutter class."""
+    def __init__(self, pvname, rbvpv=None, number=0):
+        Shutter.__init__(self, pvname, rbvpv, number)
+        self.OCStatus = PV(':'.join(pvname.split(':')[0:2]) + ':Shutter_RBV')
+        self.ttlInEnable = None
+        self.ttlInDisable = None
+        self.open = PV(':'.join(pvname.split(':')[0:2]) + ':Open')
+        self.close = PV(':'.join(pvname.split(':')[0:2]) + ':Close')
+        self.trigOutMode = None
+        self.outputMode = None
+        self.trigger = PV(':'.join(pvname.split(':')[0:2]) + ':Trigger')
+        self.reset = PV(':'.join(pvname.split(':')[0:2]) + ':Reset')
 
 
 class ShutterGroup:
@@ -1243,8 +1275,9 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutters=None):
         # Do pre-scan if enabled from PV
         if exp.preScanflag: preScan(exp, pv1, grabObject)
         # Scan PV #1
-        if pv1.randomScanflag:
-            printMsg('Scanning %s randomly over %s' % (pv1.pvname, pv1.randValStr))
+        if pv1.scanPosMode:
+            printMsg('Scanning {0} over {1} using {2} mode'.format(pv1.pvname, 
+                    pv1.scanPosString, pv1.scanPosModePv.get(as_string=True)))
         else:
             printMsg('Scanning %s from %f to %f in %d steps' % 
                     (pv1.pvname, pv1.start, pv1.stop, len(pv1.scanPos)))
@@ -1259,8 +1292,9 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutters=None):
             printSleep(pv1.settletime,'Settling')
             # Scan PV #2
             if exp.scanmode == 2 and pv2:
-                if pv1.randomScanflag:
-                    printMsg('Scanning %s randomly over %s' % (pv1.pvname, pv1.randValStr))
+                if pv1.scanPosMode:
+                    printMsg('Scanning {0} over {1} using {2} mode'.format(pv1.pvname, 
+                            pv1.scanPosString, pv1.scanPosModePv.get(as_string=True)))
                 else:
                     printMsg('Scanning %s from %f to %f in %d steps' % 
                             (pv2.pvname, pv2.start, pv2.stop, len(pv2.scanPos)))
