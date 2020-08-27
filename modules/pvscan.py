@@ -1310,12 +1310,12 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutters=None):
                     if grabObject:
                         if grabObject.grabFlag:
                             if grabObject.stepFlag:
-                                grabObject.filenameExtras = ('_{0}-{1:03d}-{2:0{6}.{7}f}_{3}-{4:03d}-{5:0{8}.{9}f}'
+                                grabObject.filenameExtras = ('_{0}_{1:03d}_{2:0{6}.{7}f}_{3}_{4:03d}_{5:0{8}.{9}f}'
                                         .format(pv1.desc, stepCount1, pv1.get(), pv2.desc, stepCount2,
                                         pv2.get(), pv1.filenameWidth, pv1.filenamePrec,
                                         pv2.filenameWidth, pv2.filenamePrec))
                             else:
-                                grabObject.filenameExtras = ('_{0}-{1:0{4}.{5}f}_{2}-{3:0{6}.{7}f}'
+                                grabObject.filenameExtras = ('_{0}_{1:0{4}.{5}f}_{2}_{3:0{6}.{7}f}'
                                         .format(pv1.desc, pv1.get(), pv2.desc, pv2.get(),
                                         pv1.filenameWidth, pv1.filenamePrec,
                                         pv2.filenameWidth, pv2.filenamePrec))
@@ -1344,11 +1344,11 @@ def pvNDScan(exp, scanpvs=None, grabObject=None, shutters=None):
                 if grabObject:
                     if grabObject.grabFlag:
                         if grabObject.stepFlag:
-                            grabObject.filenameExtras = ('_{0}-{1:03d}-{2:0{3}.{4}f}'
+                            grabObject.filenameExtras = ('_{0}_{1:03d}_{2:0{3}.{4}f}'
                                     .format(pv1.desc, stepCount1, pv1.get(),
                                     pv1.filenameWidth, pv1.filenamePrec))
                         else:
-                            grabObject.filenameExtras = ('_{0}-{1:0{2}.{3}f}'.format(pv1.desc, pv1.get(),
+                            grabObject.filenameExtras = ('_{0}_{1:0{2}.{3}f}'.format(pv1.desc, pv1.get(),
                                     pv1.filenameWidth, pv1.filenamePrec))
                         if grabObject.grabSeq2Flag:
                             pumpedGrabSequence(grabObject, shutter1, shutter2, shutter3)
